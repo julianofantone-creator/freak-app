@@ -119,9 +119,9 @@ function App() {
             <motion.button
               onClick={handleQuickStart}
               disabled={!username.trim()}
-              className={`w-full ${currentTheme.accent} disabled:bg-gray-500 disabled:cursor-not-allowed px-8 py-4 rounded-xl text-white text-lg font-bold shadow-lg transition-all`}
-              whileHover={{ scale: 1.02, y: -2 }}
-              whileTap={{ scale: 0.98 }}
+              className={`w-full ${currentTheme.accent} disabled:bg-gray-500 disabled:cursor-not-allowed px-10 py-5 rounded-xl text-white text-xl font-bold shadow-xl transition-all min-h-[70px]`}
+              whileHover={{ scale: 1.03, y: -3 }}
+              whileTap={{ scale: 0.97 }}
             >
               Start Chatting
             </motion.button>

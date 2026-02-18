@@ -131,8 +131,14 @@ const VideoChat: React.FC<VideoChatProps> = ({
 
   const likeUser = useCallback(() => {
     if (currentPartner) {
-      toast(`💖 Liked ${currentPartner.username}!`)
-      // Add heart animation
+      toast(`💕 Added ${currentPartner.username} as a crush!`, {
+        icon: '💕',
+        style: {
+          background: '#ec4899',
+          color: '#fff',
+        },
+      })
+      // TODO: Add heart animation floating up
     }
   }, [currentPartner])
 
@@ -258,8 +264,8 @@ const VideoChat: React.FC<VideoChatProps> = ({
                   </motion.div>
                   <motion.button
                     onClick={startSearch}
-                    className="bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 px-12 py-4 rounded-2xl text-white text-2xl font-bold shadow-xl"
-                    whileHover={{ scale: 1.05, y: -2 }}
+                    className="bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 px-16 py-6 rounded-2xl text-white text-3xl font-bold shadow-xl min-w-[280px]"
+                    whileHover={{ scale: 1.05, y: -3 }}
                     whileTap={{ scale: 0.95 }}
                   >
                     Start Chatting
@@ -312,77 +318,88 @@ const VideoChat: React.FC<VideoChatProps> = ({
 
       {/* Action Buttons - Top Right */}
       {isConnected && currentPartner && (
-        <div className="absolute top-6 right-6 flex space-x-3">
+        <div className="absolute top-6 right-6 flex flex-col space-y-3">
+          {/* Add as Crush Button */}
           <motion.button
             onClick={likeUser}
-            className="p-4 bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 rounded-full text-white shadow-lg"
-            whileHover={{ scale: 1.1, rotate: 5 }}
-            whileTap={{ scale: 0.9 }}
-            title="Like"
+            className="flex items-center space-x-2 bg-gradient-to-r from-pink-500 to-pink-600 hover:from-pink-600 hover:to-pink-700 px-5 py-3 rounded-full text-white shadow-lg font-medium"
+            whileHover={{ scale: 1.05, y: -1 }}
+            whileTap={{ scale: 0.95 }}
           >
-            <Heart className="w-5 h-5" />
+            <Heart className="w-4 h-4 fill-current" />
+            <span className="text-sm font-semibold">Add as Crush</span>
           </motion.button>
 
+          {/* Skip Button */}
           <motion.button
             onClick={skipConnection}
-            className={`p-4 ${theme.secondary} rounded-full text-white shadow-lg`}
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-            title="Next"
+            className="bg-gray-700 hover:bg-gray-600 px-8 py-4 rounded-xl text-white shadow-lg font-bold text-lg min-w-[120px]"
+            whileHover={{ scale: 1.05, y: -1 }}
+            whileTap={{ scale: 0.95 }}
           >
-            <SkipForward className="w-5 h-5" />
+            <div className="flex items-center justify-center space-x-2">
+              <SkipForward className="w-5 h-5" />
+              <span>SKIP</span>
+            </div>
           </motion.button>
 
+          {/* Stop Button */}
           <motion.button
             onClick={endConnection}
-            className="p-4 bg-gray-600 hover:bg-gray-700 rounded-full text-white shadow-lg"
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
-            title="Stop"
+            className="bg-red-600 hover:bg-red-700 px-8 py-4 rounded-xl text-white shadow-lg font-bold text-lg min-w-[120px]"
+            whileHover={{ scale: 1.05, y: -1 }}
+            whileTap={{ scale: 0.95 }}
           >
-            <X className="w-5 h-5" />
+            <div className="flex items-center justify-center space-x-2">
+              <X className="w-5 h-5" />
+              <span>STOP</span>
+            </div>
           </motion.button>
         </div>
       )}
 
       {/* Controls - Bottom Center */}
-      <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex space-x-3">
+      <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 flex space-x-4">
         <motion.button
           onClick={toggleVideo}
-          className={`p-4 rounded-full shadow-lg ${isVideoOn ? theme.secondary : 'bg-red-500 hover:bg-red-600'}`}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
+          className={`p-5 rounded-xl shadow-lg ${isVideoOn ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-500 hover:bg-red-600'}`}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          title={isVideoOn ? "Turn off camera" : "Turn on camera"}
         >
-          {isVideoOn ? <Video className="w-6 h-6 text-white" /> : <VideoOff className="w-6 h-6 text-white" />}
+          {isVideoOn ? <Video className="w-7 h-7 text-white" /> : <VideoOff className="w-7 h-7 text-white" />}
         </motion.button>
 
         <motion.button
           onClick={toggleAudio}
-          className={`p-4 rounded-full shadow-lg ${isAudioOn ? theme.secondary : 'bg-red-500 hover:bg-red-600'}`}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
+          className={`p-5 rounded-xl shadow-lg ${isAudioOn ? 'bg-gray-700 hover:bg-gray-600' : 'bg-red-500 hover:bg-red-600'}`}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          title={isAudioOn ? "Mute microphone" : "Unmute microphone"}
         >
-          {isAudioOn ? <Mic className="w-6 h-6 text-white" /> : <MicOff className="w-6 h-6 text-white" />}
+          {isAudioOn ? <Mic className="w-7 h-7 text-white" /> : <MicOff className="w-7 h-7 text-white" />}
         </motion.button>
 
         {isConnected && (
           <motion.button
             onClick={() => setShowChat(!showChat)}
-            className="p-4 bg-blue-500 hover:bg-blue-600 rounded-full text-white shadow-lg"
-            whileHover={{ scale: 1.1 }}
-            whileTap={{ scale: 0.9 }}
+            className="p-5 bg-blue-500 hover:bg-blue-600 rounded-xl text-white shadow-lg"
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            title="Toggle chat"
           >
-            <MessageSquare className="w-6 h-6" />
+            <MessageSquare className="w-7 h-7" />
           </motion.button>
         )}
 
         <motion.button
           onClick={() => setShowSettings(!showSettings)}
-          className={`p-4 ${theme.secondary} rounded-full text-white shadow-lg`}
-          whileHover={{ scale: 1.1 }}
-          whileTap={{ scale: 0.9 }}
+          className="p-5 bg-gray-700 hover:bg-gray-600 rounded-xl text-white shadow-lg"
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          title="Settings"
         >
-          <Settings className="w-6 h-6" />
+          <Settings className="w-7 h-7" />
         </motion.button>
       </div>
 
