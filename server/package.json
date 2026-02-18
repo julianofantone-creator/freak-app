@@ -1,0 +1,52 @@
+{
+  "name": "freak-server",
+  "version": "2.0.0",
+  "type": "module",
+  "description": "Production-ready video chat server with WebRTC signaling, advanced matching, and comprehensive security",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "NODE_ENV=development nodemon src/index.js",
+    "start": "NODE_ENV=production node src/index.js",
+    "test": "NODE_ENV=test node --test",
+    "lint": "echo 'ESLint not configured yet'",
+    "format": "echo 'Prettier not configured yet'",
+    "build": "echo 'No build needed for server'",
+    "seed": "node scripts/seed.js",
+    "clean": "node scripts/clean.js",
+    "docker:build": "docker build -t freak-server .",
+    "docker:run": "docker run -p 8080:8080 freak-server"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "keywords": [
+    "video-chat",
+    "webrtc",
+    "socket.io",
+    "matching-algorithm",
+    "node.js",
+    "express"
+  ],
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "compression": "^1.8.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-mongo-sanitize": "^2.2.0",
+    "helmet": "^7.1.0",
+    "ioredis": "^5.9.3",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.0.3",
+    "morgan": "^1.10.1",
+    "rate-limiter-flexible": "^4.0.1",
+    "socket.io": "^4.7.4",
+    "validator": "^13.15.26",
+    "xss": "^1.0.15"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
+}

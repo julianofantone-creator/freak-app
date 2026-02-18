@@ -1,0 +1,28 @@
+{
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "npm ci --only=production",
+    "watchPatterns": ["**/*.js", "**/*.json"]
+  },
+  "deploy": {
+    "startCommand": "node src/index.js",
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 100,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 3
+  },
+  "environments": {
+    "production": {
+      "variables": {
+        "NODE_ENV": "production",
+        "PORT": "$PORT"
+      }
+    },
+    "staging": {
+      "variables": {
+        "NODE_ENV": "staging",
+        "PORT": "$PORT"
+      }
+    }
+  }
+}
