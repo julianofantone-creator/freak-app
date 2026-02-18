@@ -6,6 +6,8 @@ export interface User {
   connectionsCount: number
   avatar?: string
   bio?: string
+  theme?: string
+  layoutPreference?: string
 }
 
 export type ConnectionState = 'idle' | 'searching' | 'connected' | 'disconnected'
@@ -25,4 +27,13 @@ export interface Message {
   text: string
   sender: 'me' | 'partner'
   timestamp: Date
+}
+
+export interface StreamerSettings {
+  theme: string
+  layout: 'fullscreen' | 'split' | 'corner'
+  chatEnabled: boolean
+  soundEnabled: boolean
+  autoSkipEnabled: boolean
+  skipDelay: number
 }
