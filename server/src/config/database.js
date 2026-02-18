@@ -2,6 +2,13 @@ import mongoose from 'mongoose'
 
 const connectDB = async () => {
   try {
+    // Check if MongoDB URI is provided
+    if (!process.env.MONGODB_URI) {
+      console.log('⚠️  No MongoDB URI provided - running in memory-only mode')
+      console.log('   User data will not persist between restarts')
+      return null
+    }
+
     const conn = await mongoose.connect(process.env.MONGODB_URI, {
       maxPoolSize: 10,
       serverSelectionTimeoutMS: 5000,
@@ -24,7 +31,8 @@ const connectDB = async () => {
     return conn
   } catch (error) {
     console.error('Database connection failed:', error)
-    process.exit(1)
+    console.log('⚠️  Falling back to memory-only mode')
+    return null
   }
 }
 

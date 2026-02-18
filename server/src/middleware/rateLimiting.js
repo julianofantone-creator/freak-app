@@ -133,6 +133,56 @@ export const socketRateLimit = async (socket, eventName, data) => {
   }
 }
 
+// Socket message validation and sanitization
+export const validateSocketMessage = (eventName, data) => {
+  // Basic validation rules
+  const validations = {
+    'chat-message': (data) => {
+      if (!data || typeof data.message !== 'string') return false
+      if (data.message.length > 500) return false // Max 500 chars
+      if (!data.to || typeof data.to !== 'string') return false
+      return true
+    },
+    
+    'offer': (data) => {
+      if (!data || !data.offer || !data.to) return false
+      if (typeof data.to !== 'string') return false
+      return true
+    },
+    
+    'answer': (data) => {
+      if (!data || !data.answer || !data.to) return false
+      if (typeof data.to !== 'string') return false
+      return true
+    },
+    
+    'ice-candidate': (data) => {
+      if (!data || !data.candidate || !data.to) return false
+      if (typeof data.to !== 'string') return false
+      return true
+    },
+    
+    'join-queue': (data) => {
+      if (!data || !data.username || typeof data.username !== 'string') return false
+      if (data.username.length > 20 || data.username.length < 1) return false
+      return true
+    },
+    
+    'leave-queue': () => true, // No data needed
+    
+    'disconnect': () => true // No data needed
+  }
+  
+  // Check if event is allowed
+  if (!validations[eventName]) {
+    console.warn(`Unknown socket event: ${eventName}`)
+    return false
+  }
+  
+  // Validate the data
+  return validations[eventName](data)
+}
+
 // Specific rate limiting middleware for common endpoints
 export const authRateLimit = createRateLimit('auth')
 export const registerRateLimit = createRateLimit('register')
@@ -234,6 +284,7 @@ export default {
   rateLimiters,
   createRateLimit,
   socketRateLimit,
+  validateSocketMessage,
   authRateLimit,
   registerRateLimit,
   generalRateLimit,
