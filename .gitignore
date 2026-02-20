@@ -21,3 +21,4 @@ server/.env
 .DS_Store
 *.zip
 freak-app-dist.zip
+.github/
