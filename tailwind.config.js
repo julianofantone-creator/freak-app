@@ -7,33 +7,24 @@ export default {
   theme: {
     extend: {
       colors: {
-        primary: {
-          50: '#f0f9ff',
-          500: '#8b5cf6', // Purple
-          600: '#7c3aed',
-          700: '#6d28d9',
-          900: '#4c1d95',
-        },
-        accent: {
-          50: '#fdf2f8',
-          500: '#ef4444', // Red
-          600: '#dc2626',
-        },
         freak: {
-          purple: '#8b5cf6',
-          red: '#ef4444',
-          dark: '#0f0f0f',
-        },
-        dark: {
-          50: '#f8fafc',
-          100: '#f1f5f9',
-          800: '#1e293b',
-          900: '#0f172a',
+          pink: '#FF0066',
+          'pink-light': '#FF3385',
+          'pink-dark': '#CC0052',
+          bg: '#000000',
+          surface: '#0d0d0d',
+          card: '#141414',
+          border: '#1f1f1f',
+          muted: '#6b7280',
         }
       },
       animation: {
-        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-        'bounce-subtle': 'bounce 2s infinite',
+        'ping-slow': 'ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite',
+        'pulse-fast': 'pulse 0.8s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+      },
+      boxShadow: {
+        'pink': '0 0 20px rgba(255, 0, 102, 0.4)',
+        'pink-lg': '0 0 40px rgba(255, 0, 102, 0.3)',
       }
     },
   },

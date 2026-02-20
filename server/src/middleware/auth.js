@@ -106,6 +106,23 @@ export const socketAuth = async (socket, next) => {
     }
 
     const decoded = verifyToken(token)
+
+    // Guest users — no DB lookup needed
+    if (decoded.isGuest) {
+      socket.user = {
+        _id: decoded.id,
+        id: decoded.id,
+        username: decoded.username,
+        isGuest: true,
+        isActive: true,
+        isBanned: false,
+        isLocked: false,
+        updateActivity: async () => {}
+      }
+      return next()
+    }
+
+    // Registered users — look up in DB
     const user = await User.findById(decoded.id).select('-password')
 
     if (!user) {
@@ -120,9 +137,7 @@ export const socketAuth = async (socket, next) => {
       return next(new Error('Authentication error: Account locked'))
     }
 
-    // Update user's socket ID and online status
     await user.updateActivity(socket.id)
-    
     socket.user = user
     next()
   } catch (error) {

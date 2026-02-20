@@ -39,7 +39,7 @@
     X-XSS-Protection = "1; mode=block"
     Referrer-Policy = "strict-origin-when-cross-origin"
     Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://cdn.mixpanel.com https://browser.sentry-cdn.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://freaky-api.railway.app wss://freaky-api.railway.app https://api.mixpanel.com https://sentry.io; media-src 'self' blob:; font-src 'self' data:; frame-ancestors 'none';"
-    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=(), usb=(), autoplay=()"
+    Permissions-Policy = "geolocation=(), payment=(), usb=()"
 
 # Cache optimization
 [[headers]]

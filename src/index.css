@@ -49,6 +49,42 @@
   .chat-bubble-partner {
     @apply bg-gray-100 text-gray-800 rounded-2xl px-4 py-2 max-w-xs;
   }
+
+  /* Minecraft Limited Edition Theme */
+  .minecraft-theme {
+    font-family: 'Courier New', 'Monaco', monospace;
+    image-rendering: pixelated;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: crisp-edges;
+  }
+
+  .minecraft-button {
+    @apply border-2 border-stone-600 bg-gradient-to-b from-stone-400 to-stone-600;
+    box-shadow: inset -2px -2px 0 rgba(0,0,0,0.3), inset 2px 2px 0 rgba(255,255,255,0.3);
+  }
+
+  .minecraft-button:hover {
+    @apply from-stone-300 to-stone-500;
+    box-shadow: inset -2px -2px 0 rgba(0,0,0,0.4), inset 2px 2px 0 rgba(255,255,255,0.4);
+  }
+
+  .minecraft-button:active {
+    @apply from-stone-500 to-stone-700;
+    box-shadow: inset 2px 2px 0 rgba(0,0,0,0.4), inset -2px -2px 0 rgba(255,255,255,0.2);
+  }
+
+  .creeper-gradient {
+    @apply bg-gradient-to-r from-green-600 to-emerald-500;
+    background-image: 
+      radial-gradient(circle at 25% 25%, rgba(34, 197, 94, 0.8) 0%, transparent 25%),
+      radial-gradient(circle at 75% 25%, rgba(34, 197, 94, 0.8) 0%, transparent 25%),
+      radial-gradient(circle at 50% 75%, rgba(34, 197, 94, 0.8) 0%, transparent 25%);
+  }
+}
+
+/* iOS safe area bottom padding for fixed bars */
+.safe-bottom {
+  padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
 }
 
 /* Custom scrollbar with pink theme */

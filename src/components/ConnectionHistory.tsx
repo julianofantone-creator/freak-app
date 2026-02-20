@@ -8,7 +8,7 @@ interface ConnectionHistoryProps {
   onBack: () => void
 }
 
-const ConnectionHistory: React.FC<ConnectionHistoryProps> = ({ user, onBack }) => {
+const ConnectionHistory: React.FC<ConnectionHistoryProps> = ({ onBack }) => {
   const [filter, setFilter] = useState<'all' | 'liked' | 'added'>('all')
 
   // Mock data - in real app this would come from backend

@@ -5,8 +5,8 @@
   "description": "Production-ready video chat server with WebRTC signaling, advanced matching, and comprehensive security",
   "main": "src/index.js",
   "scripts": {
-    "dev": "NODE_ENV=development nodemon src/index.js",
-    "start": "NODE_ENV=production node src/index.js",
+    "dev": "NODE_ENV=development nodemon src/simple-server.js",
+    "start": "NODE_ENV=production node src/simple-server.js",
     "test": "NODE_ENV=test node --test",
     "lint": "echo 'ESLint not configured yet'",
     "format": "echo 'Prettier not configured yet'",

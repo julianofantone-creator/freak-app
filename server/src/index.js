@@ -28,6 +28,7 @@ import WebRTCService from './services/WebRTCService.js'
 // Routes
 import authRoutes from './routes/auth.js'
 import sessionRoutes from './routes/sessions.js'
+import guestRoutes from './routes/guest.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -120,6 +121,7 @@ class FreakyServer {
     // API routes
     this.app.use('/api/auth', authRoutes)
     this.app.use('/api/sessions', sessionRoutes)
+    this.app.use('/api/guest', guestRoutes)
 
     // Stats endpoint (public but limited)
     this.app.get('/api/stats', generalRateLimit, (req, res) => {
@@ -269,11 +271,13 @@ class FreakyServer {
         // Remove from queue
         MatchingService.removeFromQueue(user._id)
         
-        // Update user status
-        user.updateOne({ 
-          isOnline: false,
-          currentSocketId: null 
-        }).catch(console.error)
+        // Update user status (skip for guest users — plain objects)
+        if (!user.isGuest && typeof user.updateOne === 'function') {
+          user.updateOne({ 
+            isOnline: false,
+            currentSocketId: null 
+          }).catch(console.error)
+        }
         
         // Notify partners in active sessions
         this.notifyPartners(socket, 'user-disconnected', {
