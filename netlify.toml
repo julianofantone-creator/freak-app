@@ -8,6 +8,7 @@
 
 # Production environment variables
 [context.production.environment]
+  VITE_API_URL = "https://freak-app-production.up.railway.app"
   VITE_APP_NAME = "Freak"
   VITE_ENVIRONMENT = "production"
   VITE_ENABLE_ANALYTICS = "false"
@@ -36,7 +37,7 @@
     X-Content-Type-Options = "nosniff"
     X-XSS-Protection = "1; mode=block"
     Referrer-Policy = "strict-origin-when-cross-origin"
-    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://cdn.mixpanel.com https://browser.sentry-cdn.com; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://freaky-api.railway.app wss://freaky-api.railway.app https://api.mixpanel.com https://sentry.io; media-src 'self' blob:; font-src 'self' data:; frame-ancestors 'none';"
+    Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://freak-app-production.up.railway.app wss://freak-app-production.up.railway.app https://tenor.googleapis.com; media-src 'self' blob:; font-src 'self' data:; frame-ancestors 'none';"
     Permissions-Policy = "geolocation=(), payment=(), usb=()"
 
 # Cache optimization
@@ -74,7 +75,7 @@
 # API redirects (fallback)
 [[redirects]]
   from = "/api/*"
-  to = "https://freaky-api.railway.app/:splat"
+  to = "https://freak-app-production.up.railway.app/:splat"
   status = 200
 
 # Analytics and performance monitoring

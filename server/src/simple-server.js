@@ -14,12 +14,12 @@ const JWT_SECRET = process.env.JWT_SECRET || 'freak-dev-secret-change-in-prod-20
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000'
 
 const app = express()
-app.use(cors({ origin: '*', credentials: true }))
+app.use(cors({ origin: true, credentials: false }))
 app.use(express.json())
 
 const httpServer = createServer(app)
 const io = new Server(httpServer, {
-  cors: { origin: '*', methods: ['GET', 'POST'] },
+  cors: { origin: true, credentials: false, methods: ['GET', 'POST'] },
   pingTimeout: 60000,
   pingInterval: 25000,
 })

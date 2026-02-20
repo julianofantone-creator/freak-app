@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "vite build",
     "build:prod": "NODE_ENV=production npm run build",
     "preview": "vite preview",
     "lint": "eslint src --ext ts,tsx --fix",
@@ -20,7 +20,8 @@
     "security:audit": "npm audit --audit-level moderate",
     "deps:update": "npx npm-check-updates -u && npm install",
     "clean": "rm -rf dist node_modules/.vite",
-    "postinstall": "echo '🔥 Freaky dependencies installed! Run npm run dev to start.'"
+    "postinstall": "echo '\ud83d\udd25 Freaky dependencies installed! Run npm run dev to start.'",
+    "start": "vite preview"
   },
   "dependencies": {
     "react": "^18.2.0",

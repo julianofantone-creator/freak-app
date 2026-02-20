@@ -30,6 +30,7 @@ export function useFreakSocket({
   const tokenRef = useRef<string | null>(null)
   const [isReady, setIsReady] = useState(false)
   const [serverOffline, setServerOffline] = useState(false)
+  const pendingJoin = useRef(false)
 
   const ICE_SERVERS = [
     { urls: 'stun:stun.l.google.com:19302' },
@@ -96,7 +97,14 @@ export function useFreakSocket({
         })
 
         socket.on('connect', () => {
-          if (!cancelled) setIsReady(true)
+          if (!cancelled) {
+            setIsReady(true)
+            // If user already clicked Start before socket was ready — join now
+            if (pendingJoin.current) {
+              pendingJoin.current = false
+              socket.emit('join-queue', { username })
+            }
+          }
         })
 
         socket.on('disconnect', () => {
@@ -160,8 +168,13 @@ export function useFreakSocket({
   }, [username])
 
   const joinQueue = useCallback(() => {
-    if (!socketRef.current || !isReady) return
     onSearching()
+    if (!socketRef.current || !isReady) {
+      // Socket still connecting — queue the join for when it's ready
+      pendingJoin.current = true
+      return
+    }
+    pendingJoin.current = false
     socketRef.current.emit('join-queue', { username })
   }, [isReady, username, onSearching])
 
