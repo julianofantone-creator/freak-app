@@ -8,11 +8,9 @@
 
 # Production environment variables
 [context.production.environment]
-  VITE_API_URL = "https://freaky-api.railway.app"
-  VITE_WS_URL = "wss://freaky-api.railway.app"
-  VITE_APP_NAME = "Freaky"
+  VITE_APP_NAME = "Freak"
   VITE_ENVIRONMENT = "production"
-  VITE_ENABLE_ANALYTICS = "true"
+  VITE_ENABLE_ANALYTICS = "false"
   VITE_ENABLE_CRASH_REPORTING = "true"
 
 # Preview/staging environment
