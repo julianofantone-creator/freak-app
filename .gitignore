@@ -1,3 +1,23 @@
-# Local Netlify folder
-.netlify
+# Dependencies
+node_modules/
+server/node_modules/
+
+# Build output
+dist/
+build/
+assets/
+
+# Local env files
+.env
+.env.local
+.env.*.local
 server/.env
+
+# Netlify
+.netlify
+
+# Misc
+*.log
+.DS_Store
+*.zip
+freak-app-dist.zip
