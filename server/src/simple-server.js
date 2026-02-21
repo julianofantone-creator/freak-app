@@ -145,6 +145,14 @@ io.on('connection', (socket) => {
     }
   })
 
+  // Crush request relay — tell partner you crushed them
+  socket.on('crush-request', ({ username: fromUsername }) => {
+    const partnerId = activePairs.get(socket.id)
+    if (partnerId) {
+      io.to(partnerId).emit('crush-request', { from: fromUsername || username })
+    }
+  })
+
   // Disconnect
   socket.on('disconnect', (reason) => {
     console.log(`❌ Disconnected: ${username} (${reason})`)

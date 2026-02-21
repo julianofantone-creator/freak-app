@@ -65,24 +65,7 @@ function App() {
         return next
       })
 
-      // Simulate a reply sometimes
-      if (msg.type === 'text' && Math.random() > 0.5) {
-        setTimeout(() => {
-          const replies = ['omg hey 👀', 'haha', '💕', 'lol same', 'fr fr', '😭']
-          const reply: ChatMessage = {
-            id: (Date.now() + 1).toString(),
-            type: 'text',
-            text: replies[Math.floor(Math.random() * replies.length)],
-            sender: 'them',
-            timestamp: new Date(),
-          }
-          setCrushMessages((prev) => {
-            const next = { ...prev, [crushId]: [...(prev[crushId] || []), reply] }
-            localStorage.setItem('freak_crush_messages', JSON.stringify(next))
-            return next
-          })
-        }, 800 + Math.random() * 2000)
-      }
+      // Messages are stored locally — real-time relay works when both users are in the same session
     },
     []
   )

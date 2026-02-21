@@ -15,6 +15,7 @@ interface UseFreakSocketOptions {
   onConnected: (partner: Partner) => void
   onDisconnected: () => void
   onSearching: () => void
+  onCrushRequest: (fromUsername: string) => void
 }
 
 const ICE_SERVERS = [
@@ -31,6 +32,7 @@ export function useFreakSocket({
   onConnected,
   onDisconnected,
   onSearching,
+  onCrushRequest,
 }: UseFreakSocketOptions) {
   const socketRef = useRef<Socket | null>(null)
   const pcRef = useRef<RTCPeerConnection | null>(null)
@@ -47,9 +49,11 @@ export function useFreakSocket({
   const onConnectedRef = useRef(onConnected)
   const onDisconnectedRef = useRef(onDisconnected)
   const onSearchingRef = useRef(onSearching)
+  const onCrushRequestRef = useRef(onCrushRequest)
   useEffect(() => { onConnectedRef.current = onConnected }, [onConnected])
   useEffect(() => { onDisconnectedRef.current = onDisconnected }, [onDisconnected])
   useEffect(() => { onSearchingRef.current = onSearching }, [onSearching])
+  useEffect(() => { onCrushRequestRef.current = onCrushRequest }, [onCrushRequest])
 
   const closePC = useCallback(() => {
     if (pcRef.current) {
@@ -219,6 +223,11 @@ export function useFreakSocket({
         closePC()
         onDisconnectedRef.current()
       })
+
+      // ── CRUSH REQUEST ─────────────────────────────────────────────
+      socket.on('crush-request', ({ from }: { from: string }) => {
+        onCrushRequestRef.current(from)
+      })
     }
 
     init()
@@ -264,5 +273,13 @@ export function useFreakSocket({
     onDisconnectedRef.current()
   }, [leaveQueue])
 
-  return { joinQueue, skip, stop, isReady, serverOffline }
+  const sendCrushRequest = useCallback(() => {
+    socketRef.current?.emit('crush-request', { username })
+  }, [username])
+
+  const acceptCrushRequest = useCallback(() => {
+    socketRef.current?.emit('crush-request', { username }) // notify them back
+  }, [username])
+
+  return { joinQueue, skip, stop, isReady, serverOffline, sendCrushRequest, acceptCrushRequest }
 }
