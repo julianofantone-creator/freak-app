@@ -36,21 +36,31 @@ const VideoChat: React.FC<VideoChatProps> = ({
   const [showCrushes, setShowCrushes] = useState(false)
   const [crushedCurrentPartner, setCrushedCurrentPartner] = useState(false)
 
-  // Initialize webcam
-  useEffect(() => {
-    let stream: MediaStream | null = null
-    const initMedia = async () => {
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-        setLocalStream(stream)
-        if (localVideoRef.current) localVideoRef.current.srcObject = stream
-      } catch {
-        toast.error('Camera access required')
+  // Initialize webcam — called on user interaction (required for iOS/Android)
+  const initMedia = useCallback(async () => {
+    if (localStream) return localStream // already have it
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+        audio: true,
+      })
+      setLocalStream(stream)
+      if (localVideoRef.current) localVideoRef.current.srcObject = stream
+      return stream
+    } catch (err: any) {
+      if (err.name === 'NotAllowedError') {
+        toast.error('Please allow camera & mic access', { duration: 4000 })
+      } else {
+        toast.error('Camera not available')
       }
+      return null
     }
-    initMedia()
-    return () => { stream?.getTracks().forEach(t => t.stop()) }
-  }, [])
+  }, [localStream])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => { localStream?.getTracks().forEach(t => t.stop()) }
+  }, [localStream])
 
   // Real socket/WebRTC hook
   const { joinQueue, skip, stop, serverOffline } = useFreakSocket({
@@ -81,9 +91,12 @@ const VideoChat: React.FC<VideoChatProps> = ({
     },
   })
 
-  const startSearch = useCallback(() => {
+  const startSearch = useCallback(async () => {
+    // Get camera first (must be triggered by user tap — required on mobile)
+    const stream = await initMedia()
+    if (!stream) return // permission denied
     joinQueue()
-  }, [joinQueue])
+  }, [initMedia, joinQueue])
 
   const addCrush = useCallback(() => {
     if (!currentPartner || crushedCurrentPartner) return
@@ -182,31 +195,24 @@ const VideoChat: React.FC<VideoChatProps> = ({
             </motion.h2>
             <p className="text-freak-muted text-base mb-10">who are you meeting today?</p>
 
-            {serverOffline ? (
-              <div className="text-center px-8">
-                <p className="text-freak-muted text-sm mb-2">⚡ Server is spinning up...</p>
-                <p className="text-freak-muted text-xs">Refresh in 30 seconds</p>
-              </div>
-            ) : (
-              <motion.button
-                onClick={startSearch}
-                className="px-14 py-4 bg-freak-pink text-white text-xl font-bold rounded-2xl shadow-pink"
-                whileHover={{ scale: 1.05, boxShadow: '0 0 30px rgba(255,0,102,0.5)' }}
-                whileTap={{ scale: 0.97 }}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-              >
-                Start
-              </motion.button>
-            )}
+            <motion.button
+              onClick={startSearch}
+              className="px-14 py-4 bg-freak-pink text-white text-xl font-bold rounded-2xl shadow-pink"
+              whileHover={{ scale: 1.05, boxShadow: '0 0 30px rgba(255,0,102,0.5)' }}
+              whileTap={{ scale: 0.97 }}
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+            >
+              {serverOffline ? 'Connecting...' : 'Start'}
+            </motion.button>
           </div>
         )}
       </div>
 
       {/* ─── SELF PiP (bottom-right) ─── */}
       <motion.div
-        className="absolute bottom-24 right-4 w-28 h-40 rounded-2xl overflow-hidden border border-freak-border shadow-2xl z-10"
+        className="absolute bottom-24 right-4 w-40 h-56 rounded-2xl overflow-hidden border-2 border-freak-pink/40 shadow-2xl z-10"
         whileHover={{ scale: 1.03 }}
       >
         <video
@@ -215,6 +221,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
           muted
           playsInline
           className="w-full h-full object-cover"
+          style={{ transform: 'scaleX(-1)' }}
         />
         {!isVideoOn && (
           <div className="absolute inset-0 bg-freak-surface flex items-center justify-center">
