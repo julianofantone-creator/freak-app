@@ -16,6 +16,7 @@ interface UseFreakSocketOptions {
   onDisconnected: () => void
   onSearching: () => void
   onCrushRequest: (fromUsername: string) => void
+  onChatMessage?: (payload: { type: string; text?: string; mediaUrl?: string }, from: string) => void
 }
 
 const ICE_SERVERS = [
@@ -33,6 +34,7 @@ export function useFreakSocket({
   onDisconnected,
   onSearching,
   onCrushRequest,
+  onChatMessage,
 }: UseFreakSocketOptions) {
   const socketRef = useRef<Socket | null>(null)
   const pcRef = useRef<RTCPeerConnection | null>(null)
@@ -54,6 +56,9 @@ export function useFreakSocket({
   useEffect(() => { onDisconnectedRef.current = onDisconnected }, [onDisconnected])
   useEffect(() => { onSearchingRef.current = onSearching }, [onSearching])
   useEffect(() => { onCrushRequestRef.current = onCrushRequest }, [onCrushRequest])
+
+  const onChatMessageRef = useRef(onChatMessage)
+  useEffect(() => { onChatMessageRef.current = onChatMessage }, [onChatMessage])
 
   const closePC = useCallback(() => {
     if (pcRef.current) {
@@ -228,6 +233,11 @@ export function useFreakSocket({
       socket.on('crush-request', ({ from }: { from: string }) => {
         onCrushRequestRef.current(from)
       })
+
+      // ── LIVE CHAT MESSAGE ─────────────────────────────────────────
+      socket.on('chat-message', ({ from, type, text, mediaUrl }: { from: string; type?: string; text?: string; mediaUrl?: string }) => {
+        onChatMessageRef.current?.({ type: type || 'text', text, mediaUrl }, from)
+      })
     }
 
     init()
@@ -281,5 +291,9 @@ export function useFreakSocket({
     socketRef.current?.emit('crush-request', { username }) // notify them back
   }, [username])
 
-  return { joinQueue, skip, stop, isReady, serverOffline, sendCrushRequest, acceptCrushRequest }
+  const sendChatMessage = useCallback((payload: { type: string; text?: string; mediaUrl?: string }) => {
+    socketRef.current?.emit('chat-message', payload)
+  }, [])
+
+  return { joinQueue, skip, stop, isReady, serverOffline, sendCrushRequest, acceptCrushRequest, sendChatMessage }
 }

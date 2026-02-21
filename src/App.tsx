@@ -3,6 +3,7 @@ import { Toaster } from 'react-hot-toast'
 import { AnimatePresence } from 'framer-motion'
 import WelcomeScreen from './components/WelcomeScreen'
 import VideoChat from './components/VideoChat'
+import ReportIssue from './components/ReportIssue'
 import { User, ConnectionState, Crush, ChatMessage } from './types'
 
 function App() {
@@ -52,6 +53,14 @@ function App() {
     })
   }, [])
 
+  const handleUpdateCrushEmoji = useCallback((crushId: string, emoji: string) => {
+    setCrushes((prev) => {
+      const next = prev.map(c => c.id === crushId ? { ...c, avatar: emoji || undefined } : c)
+      localStorage.setItem('freak_crushes', JSON.stringify(next))
+      return next
+    })
+  }, [])
+
   const handleSendCrushMessage = useCallback(
     (crushId: string, msg: Omit<ChatMessage, 'id' | 'timestamp'>) => {
       const full: ChatMessage = {
@@ -85,9 +94,12 @@ function App() {
             crushMessages={crushMessages}
             onAddCrush={handleAddCrush}
             onSendCrushMessage={handleSendCrushMessage}
+            onUpdateCrushEmoji={handleUpdateCrushEmoji}
           />
         )}
       </AnimatePresence>
+
+      <ReportIssue />
 
       <Toaster
         position="top-center"

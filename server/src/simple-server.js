@@ -27,6 +27,9 @@ const io = new Server(httpServer, {
 // ─── In-memory state ───────────────────────────────────────────────────────
 const waitingQueue = [] // [{ socketId, username, socket }]
 const activePairs = new Map() // socketId → partnerSocketId
+const reports = [] // [{ id, category, description, meta, timestamp }]
+
+const ADMIN_KEY = process.env.ADMIN_KEY || 'freak-admin-2026'
 
 // ─── REST: Guest auth ───────────────────────────────────────────────────────
 app.post('/api/guest', (req, res) => {
@@ -39,6 +42,39 @@ app.post('/api/guest', (req, res) => {
 // Health check
 app.get('/health', (_req, res) => res.json({ status: 'ok', waiting: waitingQueue.length, pairs: activePairs.size }))
 app.get('/', (_req, res) => res.json({ app: 'freak-server', version: '2.0.0' }))
+
+// ─── REST: Issue reporting ──────────────────────────────────────────────────
+app.post('/api/report', (req, res) => {
+  const { category, description, meta } = req.body || {}
+  if (!description || !description.trim()) return res.status(400).json({ error: 'Description required' })
+  const report = {
+    id: `r_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    category: category || 'other',
+    description: description.trim().slice(0, 1000),
+    meta: meta || {},
+    timestamp: new Date().toISOString(),
+    status: 'open',
+  }
+  reports.push(report)
+  console.log(`🚨 Report #${reports.length}: [${report.category}] ${report.description.slice(0, 60)}`)
+  res.json({ success: true, id: report.id })
+})
+
+app.get('/api/reports', (req, res) => {
+  if (req.query.key !== ADMIN_KEY) return res.status(401).json({ error: 'Unauthorized' })
+  const status = req.query.status // optional filter: open, resolved
+  const filtered = status ? reports.filter(r => r.status === status) : reports
+  res.json({ total: filtered.length, reports: filtered.slice().reverse() }) // newest first
+})
+
+app.patch('/api/reports/:id', (req, res) => {
+  if (req.query.key !== ADMIN_KEY) return res.status(401).json({ error: 'Unauthorized' })
+  const report = reports.find(r => r.id === req.params.id)
+  if (!report) return res.status(404).json({ error: 'Not found' })
+  if (req.body.status) report.status = req.body.status
+  if (req.body.note) report.note = req.body.note
+  res.json({ success: true, report })
+})
 
 // ─── Socket auth middleware ─────────────────────────────────────────────────
 io.use((socket, next) => {

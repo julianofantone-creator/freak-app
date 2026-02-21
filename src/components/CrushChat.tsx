@@ -107,8 +107,8 @@ const CrushChat: React.FC<CrushChatProps> = ({ crush, messages, onSendMessage, o
           <ArrowLeft className="w-5 h-5" />
         </motion.button>
 
-        <div className="w-10 h-10 rounded-full bg-freak-pink flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
-          {crush.username[0]?.toUpperCase()}
+        <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold flex-shrink-0 ${crush.avatar ? 'bg-freak-surface border border-freak-border text-2xl' : 'bg-freak-pink text-white text-lg'}`}>
+          {crush.avatar ?? crush.username[0]?.toUpperCase()}
         </div>
 
         <div className="flex-1 min-w-0">

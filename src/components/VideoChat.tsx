@@ -14,6 +14,7 @@ interface VideoChatProps {
   crushMessages: Record<string, ChatMessage[]>
   onAddCrush: (crush: Crush) => void
   onSendCrushMessage: (crushId: string, msg: Omit<ChatMessage, 'id' | 'timestamp'>) => void
+  onUpdateCrushEmoji: (crushId: string, emoji: string) => void
 }
 
 const VideoChat: React.FC<VideoChatProps> = ({
@@ -23,6 +24,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
   crushMessages,
   onAddCrush,
   onSendCrushMessage,
+  onUpdateCrushEmoji,
 }) => {
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
@@ -36,6 +38,14 @@ const VideoChat: React.FC<VideoChatProps> = ({
   const [showCrushes, setShowCrushes] = useState(false)
   const [crushedCurrentPartner, setCrushedCurrentPartner] = useState(false)
   const [incomingCrush, setIncomingCrush] = useState<{ username: string } | null>(null)
+
+  // Re-attach local stream whenever it changes or we enter connected view
+  // (React re-mounts the video element on state transitions, srcObject gets lost)
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      localVideoRef.current.srcObject = localStream
+    }
+  }, [localStream, isConnected])
 
   // Camera init — must be on user tap for iOS/Android
   const initMedia = useCallback(async () => {
@@ -58,7 +68,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
     return () => { localStream?.getTracks().forEach(t => t.stop()) }
   }, [localStream])
 
-  const { joinQueue, skip, stop, serverOffline, sendCrushRequest, acceptCrushRequest } = useFreakSocket({
+  const { joinQueue, skip, stop, serverOffline, sendCrushRequest, acceptCrushRequest, sendChatMessage } = useFreakSocket({
     username: _user.username,
     localStream,
     remoteVideoRef,
@@ -88,6 +98,12 @@ const VideoChat: React.FC<VideoChatProps> = ({
     onCrushRequest: (from) => {
       setIncomingCrush({ username: from })
     },
+    // Incoming live chat message from partner (text, image, or gif)
+    onChatMessage: ({ type, text, mediaUrl }, from) => {
+      const crush = crushes.find(c => c.username === from)
+      const id = crush?.id ?? currentPartner?.id ?? from
+      onSendCrushMessage(id, { type: type as 'text' | 'image' | 'gif', text, mediaUrl, sender: 'them' })
+    },
   })
 
   const startSearch = useCallback(async () => {
@@ -95,6 +111,18 @@ const VideoChat: React.FC<VideoChatProps> = ({
     if (!stream) return
     joinQueue()
   }, [initMedia, joinQueue])
+
+  // Wrap onSendCrushMessage: also emit via socket if recipient is current partner
+  const handleSendCrushMessage = useCallback(
+    (crushId: string, msg: Omit<ChatMessage, 'id' | 'timestamp'>) => {
+      onSendCrushMessage(crushId, msg)
+      // Relay ALL message types via socket if the crush is the current active partner
+      if (isConnected && currentPartner?.id === crushId) {
+        sendChatMessage({ type: msg.type, text: msg.text, mediaUrl: msg.mediaUrl })
+      }
+    },
+    [onSendCrushMessage, isConnected, currentPartner, sendChatMessage]
+  )
 
   const addCrush = useCallback(() => {
     if (!currentPartner || crushedCurrentPartner) return
@@ -276,14 +304,14 @@ const VideoChat: React.FC<VideoChatProps> = ({
 
           {(isConnected || isSearching) && (
             <motion.button onClick={skip} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-              className="flex items-center gap-2 px-8 py-3 rounded-2xl border-2 border-freak-pink text-freak-pink font-bold text-base">
+              className="flex items-center justify-center gap-2 px-8 py-3 rounded-2xl border-2 border-freak-pink text-freak-pink font-bold text-base">
               <SkipForward className="w-5 h-5" /> SKIP
             </motion.button>
           )}
 
           {(isConnected || isSearching) && (
             <motion.button onClick={stop} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
-              className="flex items-center gap-2 px-8 py-3 rounded-2xl bg-freak-pink text-white font-bold text-base shadow-pink">
+              className="flex items-center justify-center gap-2 px-8 py-3 rounded-2xl bg-freak-pink text-white font-bold text-base shadow-pink">
               <Square className="w-4 h-4 fill-white" /> STOP
             </motion.button>
           )}
@@ -302,8 +330,8 @@ const VideoChat: React.FC<VideoChatProps> = ({
         </div>
       </div>
 
-      {/* ─── CRUSHES TAB ─── */}
-      {!isConnected && !isSearching && (
+      {/* ─── CRUSHES TAB — visible in idle and connected ─── */}
+      {!isSearching && (
         <motion.button
           onClick={() => setShowCrushes(true)}
           className="absolute bottom-24 left-4 z-10 flex items-center gap-1.5 bg-black/60 backdrop-blur-sm border border-freak-border px-3 py-2 rounded-full"
@@ -317,7 +345,9 @@ const VideoChat: React.FC<VideoChatProps> = ({
       <AnimatePresence>
         {showCrushes && (
           <CrushesPanel crushes={crushes} messages={crushMessages}
-            onSendMessage={onSendCrushMessage} onClose={() => setShowCrushes(false)} />
+            onSendMessage={handleSendCrushMessage}
+            onUpdateCrushEmoji={onUpdateCrushEmoji}
+            onClose={() => setShowCrushes(false)} />
         )}
       </AnimatePresence>
     </div>
