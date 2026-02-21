@@ -137,11 +137,11 @@ io.on('connection', (socket) => {
     if (partnerId) io.to(partnerId).emit('webrtc:ice-candidate', { candidate })
   })
 
-  // Chat message relay
-  socket.on('chat-message', ({ text }) => {
+  // Chat message relay — forward full payload (text, image, gif)
+  socket.on('chat-message', (payload) => {
     const partnerId = activePairs.get(socket.id)
     if (partnerId) {
-      io.to(partnerId).emit('chat-message', { text, from: username, timestamp: Date.now() })
+      io.to(partnerId).emit('chat-message', { ...payload, from: username, timestamp: Date.now() })
     }
   })
 
