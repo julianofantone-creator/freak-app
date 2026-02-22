@@ -17,6 +17,9 @@ interface UseFreakSocketOptions {
   onSearching: () => void
   onCrushRequest: (fromUsername: string) => void
   onChatMessage?: (payload: { type: string; text?: string; mediaUrl?: string }, from: string) => void
+  onCrushMessage?: (payload: { id: string; type: string; text?: string; mediaUrl?: string; timestamp: number }, from: string) => void
+  onMessageRead?: (fromUsername: string) => void
+  onMessageAck?: (id: string, status: 'delivered' | 'queued') => void
 }
 
 const ICE_SERVERS = [
@@ -35,6 +38,9 @@ export function useFreakSocket({
   onSearching,
   onCrushRequest,
   onChatMessage,
+  onCrushMessage,
+  onMessageRead,
+  onMessageAck,
 }: UseFreakSocketOptions) {
   const socketRef = useRef<Socket | null>(null)
   const pcRef = useRef<RTCPeerConnection | null>(null)
@@ -59,6 +65,15 @@ export function useFreakSocket({
 
   const onChatMessageRef = useRef(onChatMessage)
   useEffect(() => { onChatMessageRef.current = onChatMessage }, [onChatMessage])
+
+  const onCrushMessageRef = useRef(onCrushMessage)
+  useEffect(() => { onCrushMessageRef.current = onCrushMessage }, [onCrushMessage])
+
+  const onMessageReadRef = useRef(onMessageRead)
+  useEffect(() => { onMessageReadRef.current = onMessageRead }, [onMessageRead])
+
+  const onMessageAckRef = useRef(onMessageAck)
+  useEffect(() => { onMessageAckRef.current = onMessageAck }, [onMessageAck])
 
   const closePC = useCallback(() => {
     if (pcRef.current) {
@@ -234,9 +249,26 @@ export function useFreakSocket({
         onCrushRequestRef.current(from)
       })
 
-      // ── LIVE CHAT MESSAGE ─────────────────────────────────────────
+      // ── LIVE CHAT MESSAGE (in-call relay) ────────────────────────
       socket.on('chat-message', ({ from, type, text, mediaUrl }: { from: string; type?: string; text?: string; mediaUrl?: string }) => {
         onChatMessageRef.current?.({ type: type || 'text', text, mediaUrl }, from)
+      })
+
+      // ── DIRECT CRUSH MESSAGE (routed by username) ─────────────────
+      socket.on('crush-message', ({ id, from, type, text, mediaUrl, timestamp }: {
+        id: string; from: string; type: string; text?: string; mediaUrl?: string; timestamp: number
+      }) => {
+        onCrushMessageRef.current?.({ id, type, text, mediaUrl, timestamp }, from)
+      })
+
+      // ── MESSAGE DELIVERY ACK ──────────────────────────────────────
+      socket.on('crush-message-ack', ({ id, status }: { id: string; status: 'delivered' | 'queued' }) => {
+        onMessageAckRef.current?.(id, status)
+      })
+
+      // ── READ RECEIPT ──────────────────────────────────────────────
+      socket.on('message-read', ({ fromUsername }: { fromUsername: string }) => {
+        onMessageReadRef.current?.(fromUsername)
       })
     }
 
@@ -295,5 +327,15 @@ export function useFreakSocket({
     socketRef.current?.emit('chat-message', payload)
   }, [])
 
-  return { joinQueue, skip, stop, isReady, serverOffline, sendCrushRequest, acceptCrushRequest, sendChatMessage }
+  // Direct message to a crush by their username (works even if not in same call)
+  const sendDirectCrushMessage = useCallback((toUsername: string, payload: { id: string; type: string; text?: string; mediaUrl?: string }) => {
+    socketRef.current?.emit('crush-message', { toUsername, ...payload })
+  }, [])
+
+  // Tell the other person you've read their messages
+  const sendReadReceipt = useCallback((toUsername: string) => {
+    socketRef.current?.emit('message-read', { toUsername })
+  }, [])
+
+  return { joinQueue, skip, stop, isReady, serverOffline, sendCrushRequest, acceptCrushRequest, sendChatMessage, sendDirectCrushMessage, sendReadReceipt }
 }

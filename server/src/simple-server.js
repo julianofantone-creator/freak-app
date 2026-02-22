@@ -27,6 +27,8 @@ const io = new Server(httpServer, {
 // ─── In-memory state ───────────────────────────────────────────────────────
 const waitingQueue = [] // [{ socketId, username, socket }]
 const activePairs = new Map() // socketId → partnerSocketId
+const userSockets = new Map() // username → socket (for direct messaging)
+const pendingCrushMessages = new Map() // username → [{ id, from, type, text, mediaUrl, timestamp }]
 const reports = [] // [{ id, category, description, meta, timestamp }]
 
 const ADMIN_KEY = process.env.ADMIN_KEY || 'freak-admin-2026'
@@ -145,6 +147,17 @@ io.on('connection', (socket) => {
   const { username } = socket.user
   console.log(`✅ Connected: ${username} (${socket.id})`)
 
+  // Track username → socket for direct messaging
+  userSockets.set(username, socket)
+
+  // Deliver any queued crush messages
+  const pending = pendingCrushMessages.get(username) || []
+  if (pending.length > 0) {
+    console.log(`📬 Delivering ${pending.length} queued messages to ${username}`)
+    pending.forEach(msg => socket.emit('crush-message', msg))
+    pendingCrushMessages.delete(username)
+  }
+
   // User wants to find a match
   socket.on('join-queue', () => {
     console.log(`🔍 ${username} joining queue`)
@@ -189,9 +202,42 @@ io.on('connection', (socket) => {
     }
   })
 
+  // ── DIRECT CRUSH MESSAGE (routed by username, queued if offline) ──
+  socket.on('crush-message', (payload) => {
+    const { toUsername, type, text, mediaUrl, id: clientId } = payload
+    if (!toUsername || !type) return
+
+    const msgId = clientId || `m_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`
+    const msg = { id: msgId, from: username, type, text, mediaUrl, timestamp: Date.now() }
+
+    const recipientSocket = userSockets.get(toUsername)
+    if (recipientSocket?.connected) {
+      recipientSocket.emit('crush-message', msg)
+      socket.emit('crush-message-ack', { id: msgId, status: 'delivered' })
+      console.log(`💬 Direct message: ${username} → ${toUsername} (delivered)`)
+    } else {
+      // Queue for when they come online
+      const queue = pendingCrushMessages.get(toUsername) || []
+      queue.push(msg)
+      if (queue.length > 200) queue.shift() // cap at 200
+      pendingCrushMessages.set(toUsername, queue)
+      socket.emit('crush-message-ack', { id: msgId, status: 'queued' })
+      console.log(`📬 Direct message: ${username} → ${toUsername} (queued, offline)`)
+    }
+  })
+
+  // ── READ RECEIPT ──────────────────────────────────────────────────
+  socket.on('message-read', ({ toUsername }) => {
+    const recipientSocket = userSockets.get(toUsername)
+    if (recipientSocket?.connected) {
+      recipientSocket.emit('message-read', { fromUsername: username })
+    }
+  })
+
   // Disconnect
   socket.on('disconnect', (reason) => {
     console.log(`❌ Disconnected: ${username} (${reason})`)
+    userSockets.delete(username)
     cleanup(socket)
   })
 })

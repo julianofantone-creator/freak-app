@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Flag, X, Send, CheckCircle } from 'lucide-react'
+import { X, Send, CheckCircle } from 'lucide-react'
 
 const CATEGORIES = [
   { value: 'video', label: '📹 Video / Camera' },
@@ -51,13 +51,12 @@ const ReportIssue: React.FC = () => {
 
   return (
     <>
-      {/* Floating trigger button */}
+      {/* Top-left text button */}
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-4 left-4 z-50 p-2 rounded-full bg-black/40 border border-white/10 text-white/40 hover:text-white/80 hover:bg-black/60 transition-all"
-        title="Report an issue"
+        className="fixed top-3 left-4 z-50 text-white/30 hover:text-white/70 text-xs font-medium transition-colors"
       >
-        <Flag size={16} />
+        Report an issue
       </button>
 
       <AnimatePresence>

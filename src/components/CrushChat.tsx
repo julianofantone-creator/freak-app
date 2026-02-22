@@ -1,7 +1,27 @@
 import React, { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Send, Image, X, Search } from 'lucide-react'
+import { ArrowLeft, Send, Image, X, Search, Check, CheckCheck } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { Crush, ChatMessage } from '../types'
+
+// Compress image to max 800px wide, JPEG 0.75 quality (~30-80KB output)
+async function compressImage(dataUrl: string, maxWidth = 800, quality = 0.75): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new window.Image()
+    img.onload = () => {
+      const scale = Math.min(1, maxWidth / img.width)
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.round(img.width * scale)
+      canvas.height = Math.round(img.height * scale)
+      const ctx = canvas.getContext('2d')
+      if (!ctx) { resolve(dataUrl); return }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+      resolve(canvas.toDataURL('image/jpeg', quality))
+    }
+    img.onerror = reject
+    img.src = dataUrl
+  })
+}
 
 const TENOR_KEY = 'LIVDSRZULELA' // demo key — replace with your own
 
@@ -10,15 +30,17 @@ interface CrushChatProps {
   messages: ChatMessage[]
   onSendMessage: (crushId: string, msg: Omit<ChatMessage, 'id' | 'timestamp'>) => void
   onBack: () => void
+  status?: 'sent' | 'delivered' | 'queued' | 'read'
 }
 
-const CrushChat: React.FC<CrushChatProps> = ({ crush, messages, onSendMessage, onBack }) => {
+const CrushChat: React.FC<CrushChatProps> = ({ crush, messages, onSendMessage, onBack, status }) => {
   const [text, setText] = useState('')
   const [showGifPicker, setShowGifPicker] = useState(false)
   const [gifSearch, setGifSearch] = useState('')
   const [gifs, setGifs] = useState<{ id: string; url: string; preview: string }[]>([])
   const [gifLoading, setGifLoading] = useState(false)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [imageCompressing, setImageCompressing] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const gifSearchRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -78,15 +100,35 @@ const CrushChat: React.FC<CrushChatProps> = ({ crush, messages, onSendMessage, o
   const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
+    // Reject files over 20MB before even reading
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error('Image too large (max 20MB)')
+      return
+    }
+    setImageCompressing(true)
     const reader = new FileReader()
-    reader.onload = (ev) => {
-      setImagePreview(ev.target?.result as string)
+    reader.onload = async (ev) => {
+      try {
+        const raw = ev.target?.result as string
+        const compressed = await compressImage(raw)
+        setImagePreview(compressed)
+      } catch {
+        toast.error('Could not load image')
+      } finally {
+        setImageCompressing(false)
+      }
+    }
+    reader.onerror = () => {
+      toast.error('Could not read image')
+      setImageCompressing(false)
     }
     reader.readAsDataURL(file)
+    // Reset input so same file can be re-selected
+    e.target.value = ''
   }
 
   const sendImage = () => {
-    if (!imagePreview) return
+    if (!imagePreview || imageCompressing) return
     onSendMessage(crush.id, { type: 'image', mediaUrl: imagePreview, sender: 'me' })
     setImagePreview(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
@@ -94,6 +136,9 @@ const CrushChat: React.FC<CrushChatProps> = ({ crush, messages, onSendMessage, o
 
   const formatTime = (d: Date) =>
     new Date(d).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+
+  // Index of last message sent by 'me' (for showing read receipt)
+  const lastMyMsgIdx = messages.reduce((last, m, i) => m.sender === 'me' ? i : last, -1)
 
   return (
     <div className="flex flex-col h-full bg-freak-bg">
@@ -128,61 +173,81 @@ const CrushChat: React.FC<CrushChatProps> = ({ crush, messages, onSendMessage, o
           </div>
         )}
 
-        {messages.map((msg) => (
-          <motion.div
-            key={msg.id}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className={`flex ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}
-          >
-            <div className={`max-w-[70%] ${msg.sender === 'me' ? 'items-end' : 'items-start'} flex flex-col gap-0.5`}>
-              {msg.type === 'text' && (
-                <div className={`px-4 py-2.5 rounded-2xl text-sm ${
-                  msg.sender === 'me'
-                    ? 'bg-freak-pink text-white rounded-br-sm'
-                    : 'bg-freak-card text-white rounded-bl-sm'
-                }`}>
-                  {msg.text}
-                </div>
-              )}
+        {messages.map((msg, idx) => {
+          const isLastMine = msg.sender === 'me' && idx === lastMyMsgIdx
+          return (
+            <motion.div
+              key={msg.id}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={`flex ${msg.sender === 'me' ? 'justify-end' : 'justify-start'}`}
+            >
+              <div className={`max-w-[70%] ${msg.sender === 'me' ? 'items-end' : 'items-start'} flex flex-col gap-0.5`}>
+                {msg.type === 'text' && (
+                  <div className={`px-4 py-2.5 rounded-2xl text-sm ${
+                    msg.sender === 'me'
+                      ? 'bg-freak-pink text-white rounded-br-sm'
+                      : 'bg-freak-card text-white rounded-bl-sm'
+                  }`}>
+                    {msg.text}
+                  </div>
+                )}
 
-              {(msg.type === 'image' || msg.type === 'gif') && (
-                <div className={`rounded-2xl overflow-hidden ${
-                  msg.sender === 'me' ? 'rounded-br-sm' : 'rounded-bl-sm'
-                }`}>
-                  <img
-                    src={msg.mediaUrl}
-                    alt={msg.type}
-                    className="max-w-full max-h-48 object-cover"
-                    loading="lazy"
-                  />
-                </div>
-              )}
+                {(msg.type === 'image' || msg.type === 'gif') && (
+                  <div className={`rounded-2xl overflow-hidden ${
+                    msg.sender === 'me' ? 'rounded-br-sm' : 'rounded-bl-sm'
+                  }`}>
+                    <img
+                      src={msg.mediaUrl}
+                      alt={msg.type}
+                      className="max-w-full max-h-48 object-cover"
+                      loading="lazy"
+                    />
+                  </div>
+                )}
 
-              <span className="text-[10px] text-freak-muted px-1">
-                {formatTime(msg.timestamp)}
-              </span>
-            </div>
-          </motion.div>
-        ))}
+                <div className="flex items-center gap-1 px-1">
+                  <span className="text-[10px] text-freak-muted">
+                    {formatTime(msg.timestamp)}
+                  </span>
+                  {/* Read receipt — only on last message I sent */}
+                  {isLastMine && status && (
+                    <span className="flex items-center">
+                      {status === 'sent' && <Check size={11} className="text-freak-muted" />}
+                      {status === 'queued' && <Check size={11} className="text-freak-muted" />}
+                      {status === 'delivered' && <CheckCheck size={11} className="text-freak-muted" />}
+                      {status === 'read' && <CheckCheck size={11} className="text-freak-pink" />}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )
+        })}
         <div ref={messagesEndRef} />
       </div>
 
       {/* Image Preview */}
       <AnimatePresence>
-        {imagePreview && (
+        {(imagePreview || imageCompressing) && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 20 }}
             className="px-4 py-3 border-t border-freak-border bg-freak-surface flex items-center gap-3"
           >
-            <img src={imagePreview} alt="preview" className="w-16 h-16 object-cover rounded-xl" />
+            {imageCompressing ? (
+              <div className="w-16 h-16 rounded-xl bg-freak-card flex items-center justify-center">
+                <div className="w-5 h-5 border-2 border-freak-pink border-t-transparent rounded-full animate-spin" />
+              </div>
+            ) : (
+              <img src={imagePreview!} alt="preview" className="w-16 h-16 object-cover rounded-xl" />
+            )}
             <div className="flex-1">
-              <p className="text-white text-sm">Ready to send</p>
+              <p className="text-white text-sm">{imageCompressing ? 'Compressing...' : 'Ready to send'}</p>
             </div>
             <motion.button
-              onClick={() => setImagePreview(null)}
+              onClick={() => { setImagePreview(null); setImageCompressing(false) }}
               whileTap={{ scale: 0.9 }}
               className="text-freak-muted hover:text-white"
             >
@@ -190,8 +255,9 @@ const CrushChat: React.FC<CrushChatProps> = ({ crush, messages, onSendMessage, o
             </motion.button>
             <motion.button
               onClick={sendImage}
+              disabled={imageCompressing || !imagePreview}
               whileTap={{ scale: 0.9 }}
-              className="bg-freak-pink text-white px-4 py-2 rounded-xl text-sm font-semibold"
+              className="bg-freak-pink disabled:opacity-40 text-white px-4 py-2 rounded-xl text-sm font-semibold"
             >
               Send
             </motion.button>

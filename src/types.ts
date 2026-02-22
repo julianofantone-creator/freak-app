@@ -30,6 +30,7 @@ export interface ChatMessage {
   mediaUrl?: string
   sender: 'me' | 'them'
   timestamp: Date
+  status?: 'sent' | 'delivered' | 'read' // only relevant for sender's messages
 }
 
 export interface Connection {

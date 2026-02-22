@@ -23,11 +23,19 @@ interface CrushesPanelProps {
   onSendMessage: (crushId: string, msg: Omit<ChatMessage, 'id' | 'timestamp'>) => void
   onUpdateCrushEmoji: (crushId: string, emoji: string) => void
   onClose: () => void
+  crushStatuses?: Record<string, 'sent' | 'delivered' | 'queued' | 'read'>
+  onSendReadReceipt?: (username: string) => void
 }
 
-const CrushesPanel: React.FC<CrushesPanelProps> = ({ crushes, messages, onSendMessage, onUpdateCrushEmoji, onClose }) => {
+const CrushesPanel: React.FC<CrushesPanelProps> = ({ crushes, messages, onSendMessage, onUpdateCrushEmoji, onClose, crushStatuses = {}, onSendReadReceipt }) => {
   const [activeCrush, setActiveCrush] = useState<Crush | null>(null)
   const [emojiPickerFor, setEmojiPickerFor] = useState<string | null>(null)
+
+  const openChat = (crush: Crush) => {
+    setActiveCrush(crush)
+    // Tell the other person we've read their messages
+    onSendReadReceipt?.(crush.username)
+  }
 
   const formatTime = (d?: Date) => {
     if (!d) return ''
@@ -63,6 +71,7 @@ const CrushesPanel: React.FC<CrushesPanelProps> = ({ crushes, messages, onSendMe
               messages={messages[activeCrush.id] || []}
               onSendMessage={onSendMessage}
               onBack={() => setActiveCrush(null)}
+              status={crushStatuses[activeCrush.id]}
             />
           </motion.div>
         ) : (
@@ -118,7 +127,7 @@ const CrushesPanel: React.FC<CrushesPanelProps> = ({ crushes, messages, onSendMe
                     return (
                       <motion.button
                         key={crush.id}
-                        onClick={() => setActiveCrush(crush)}
+                        onClick={() => openChat(crush)}
                         className="w-full flex items-center gap-4 px-5 py-4 hover:bg-freak-surface transition-colors text-left"
                         whileTap={{ scale: 0.98 }}
                       >

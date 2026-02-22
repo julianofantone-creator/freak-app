@@ -28,6 +28,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
 }) => {
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
+  const pendingCrushIdRef = useRef<string | null>(null) // tracks last crush we sent a msg to (for ack mapping)
 
   const [isConnected, setIsConnected] = useState(false)
   const [isSearching, setIsSearching] = useState(false)
@@ -38,6 +39,10 @@ const VideoChat: React.FC<VideoChatProps> = ({
   const [showCrushes, setShowCrushes] = useState(false)
   const [crushedCurrentPartner, setCrushedCurrentPartner] = useState(false)
   const [incomingCrush, setIncomingCrush] = useState<{ username: string } | null>(null)
+  // Per-crush delivery/read status: crushId → status (for the last sent message)
+  const [crushStatuses, setCrushStatuses] = useState<Record<string, 'sent' | 'delivered' | 'queued' | 'read'>>({})
+  // Map username → crushId for fast lookup
+  const usernameToCrushId = useCallback((uname: string) => crushes.find(c => c.username === uname)?.id, [crushes])
 
   // Re-attach local stream whenever it changes or we enter connected view
   // (React re-mounts the video element on state transitions, srcObject gets lost)
@@ -68,7 +73,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
     return () => { localStream?.getTracks().forEach(t => t.stop()) }
   }, [localStream])
 
-  const { joinQueue, skip, stop, serverOffline, sendCrushRequest, acceptCrushRequest, sendChatMessage } = useFreakSocket({
+  const { joinQueue, skip, stop, serverOffline, sendCrushRequest, acceptCrushRequest, sendDirectCrushMessage, sendReadReceipt } = useFreakSocket({
     username: _user.username,
     localStream,
     remoteVideoRef,
@@ -98,11 +103,26 @@ const VideoChat: React.FC<VideoChatProps> = ({
     onCrushRequest: (from) => {
       setIncomingCrush({ username: from })
     },
-    // Incoming live chat message from partner (text, image, or gif)
-    onChatMessage: ({ type, text, mediaUrl }, from) => {
-      const crush = crushes.find(c => c.username === from)
-      const id = crush?.id ?? currentPartner?.id ?? from
-      onSendCrushMessage(id, { type: type as 'text' | 'image' | 'gif', text, mediaUrl, sender: 'them' })
+    // Incoming direct crush message (routed by username, works anytime)
+    onCrushMessage: ({ type, text, mediaUrl }, from) => {
+      const crushId = usernameToCrushId(from)
+      if (crushId) {
+        onSendCrushMessage(crushId, { type: type as 'text' | 'image' | 'gif', text, mediaUrl, sender: 'them' })
+      }
+    },
+    // Server ack — update delivery status for this crush's last message
+    onMessageAck: (_id, status) => {
+      // status from server: 'delivered' (online) or 'queued' (offline)
+      // We update the most-recently-messaged crush's status
+      // (simple: we set it per the stored pendingCrushId ref)
+      if (pendingCrushIdRef.current) {
+        setCrushStatuses(prev => ({ ...prev, [pendingCrushIdRef.current!]: status === 'delivered' ? 'delivered' : 'queued' }))
+      }
+    },
+    // They read our messages
+    onMessageRead: (fromUsername) => {
+      const crushId = usernameToCrushId(fromUsername)
+      if (crushId) setCrushStatuses(prev => ({ ...prev, [crushId]: 'read' }))
     },
   })
 
@@ -112,16 +132,20 @@ const VideoChat: React.FC<VideoChatProps> = ({
     joinQueue()
   }, [initMedia, joinQueue])
 
-  // Wrap onSendCrushMessage: also emit via socket if recipient is current partner
+  // Send message to crush — always routes via socket by username (works even if not in same call)
   const handleSendCrushMessage = useCallback(
     (crushId: string, msg: Omit<ChatMessage, 'id' | 'timestamp'>) => {
       onSendCrushMessage(crushId, msg)
-      // Relay ALL message types via socket if the crush is the current active partner
-      if (isConnected && currentPartner?.id === crushId) {
-        sendChatMessage({ type: msg.type, text: msg.text, mediaUrl: msg.mediaUrl })
+      // Find crush by id to get their username
+      const crush = crushes.find(c => c.id === crushId)
+      if (crush && msg.sender === 'me') {
+        const msgId = `m_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`
+        pendingCrushIdRef.current = crushId
+        setCrushStatuses(prev => ({ ...prev, [crushId]: 'sent' }))
+        sendDirectCrushMessage(crush.username, { id: msgId, type: msg.type, text: msg.text, mediaUrl: msg.mediaUrl })
       }
     },
-    [onSendCrushMessage, isConnected, currentPartner, sendChatMessage]
+    [onSendCrushMessage, crushes, sendDirectCrushMessage]
   )
 
   const addCrush = useCallback(() => {
@@ -347,7 +371,9 @@ const VideoChat: React.FC<VideoChatProps> = ({
           <CrushesPanel crushes={crushes} messages={crushMessages}
             onSendMessage={handleSendCrushMessage}
             onUpdateCrushEmoji={onUpdateCrushEmoji}
-            onClose={() => setShowCrushes(false)} />
+            onClose={() => setShowCrushes(false)}
+            crushStatuses={crushStatuses}
+            onSendReadReceipt={sendReadReceipt} />
         )}
       </AnimatePresence>
     </div>
