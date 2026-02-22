@@ -46,6 +46,7 @@ export function useFreakSocket({
   const pcRef = useRef<RTCPeerConnection | null>(null)
   const [isReady, setIsReady] = useState(false)
   const [serverOffline, setServerOffline] = useState(false)
+  const [liveStats, setLiveStats] = useState<{ online: number; inCalls: number; searching: number } | null>(null)
   const pendingJoin = useRef(false)
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -249,6 +250,11 @@ export function useFreakSocket({
         onCrushRequestRef.current(from)
       })
 
+      // ── LIVE STATS ────────────────────────────────────────────────
+      socket.on('stats', (data: { online: number; inCalls: number; searching: number }) => {
+        setLiveStats(data)
+      })
+
       // ── LIVE CHAT MESSAGE (in-call relay) ────────────────────────
       socket.on('chat-message', ({ from, type, text, mediaUrl }: { from: string; type?: string; text?: string; mediaUrl?: string }) => {
         onChatMessageRef.current?.({ type: type || 'text', text, mediaUrl }, from)
@@ -337,5 +343,5 @@ export function useFreakSocket({
     socketRef.current?.emit('message-read', { toUsername })
   }, [])
 
-  return { joinQueue, skip, stop, isReady, serverOffline, sendCrushRequest, acceptCrushRequest, sendChatMessage, sendDirectCrushMessage, sendReadReceipt }
+  return { joinQueue, skip, stop, isReady, serverOffline, liveStats, sendCrushRequest, acceptCrushRequest, sendChatMessage, sendDirectCrushMessage, sendReadReceipt }
 }

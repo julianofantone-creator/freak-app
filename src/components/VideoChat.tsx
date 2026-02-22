@@ -73,7 +73,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
     return () => { localStream?.getTracks().forEach(t => t.stop()) }
   }, [localStream])
 
-  const { joinQueue, skip, stop, serverOffline, sendCrushRequest, acceptCrushRequest, sendDirectCrushMessage, sendReadReceipt } = useFreakSocket({
+  const { joinQueue, skip, stop, serverOffline, liveStats, sendCrushRequest, acceptCrushRequest, sendDirectCrushMessage, sendReadReceipt } = useFreakSocket({
     username: _user.username,
     localStream,
     remoteVideoRef,
@@ -260,6 +260,12 @@ const VideoChat: React.FC<VideoChatProps> = ({
               animate={{ opacity: [0.5, 1, 0.5] }} transition={{ duration: 2, repeat: Infinity }}>
               Looking for your next freak...
             </motion.p>
+            {liveStats && liveStats.online > 0 && (
+              <p className="mt-3 text-freak-muted text-sm flex items-center gap-1.5">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse inline-block" />
+                {liveStats.online.toLocaleString()} online · {liveStats.searching} searching
+              </p>
+            )}
             <motion.button onClick={stop}
               className="mt-8 px-6 py-2.5 border border-freak-border text-freak-muted rounded-full text-sm hover:border-freak-pink hover:text-white transition-colors"
               whileTap={{ scale: 0.95 }}>
@@ -280,6 +286,23 @@ const VideoChat: React.FC<VideoChatProps> = ({
               initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
               {serverOffline ? 'Connecting...' : 'Start'}
             </motion.button>
+            {/* Live online counter */}
+            {liveStats && liveStats.online > 0 && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.3 }}
+                className="mt-6 flex items-center gap-2 text-freak-muted text-sm"
+              >
+                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse inline-block" />
+                <span>
+                  <span className="text-white font-semibold">{liveStats.online.toLocaleString()}</span> online
+                  {liveStats.inCalls > 0 && (
+                    <span className="text-freak-muted"> · {liveStats.inCalls} in calls</span>
+                  )}
+                </span>
+              </motion.div>
+            )}
           </div>
         )}
       </div>

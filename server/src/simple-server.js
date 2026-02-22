@@ -45,6 +45,25 @@ app.post('/api/guest', (req, res) => {
 app.get('/health', (_req, res) => res.json({ status: 'ok', waiting: waitingQueue.length, pairs: activePairs.size }))
 app.get('/', (_req, res) => res.json({ app: 'freak-server', version: '2.0.0' }))
 
+// Live stats endpoint
+app.get('/api/stats', (_req, res) => {
+  res.json({
+    online: io.sockets.sockets.size,
+    inCalls: Math.floor(activePairs.size / 2),
+    searching: waitingQueue.length,
+  })
+})
+
+// Broadcast live stats to all connected clients every 10s
+function broadcastStats() {
+  io.emit('stats', {
+    online: io.sockets.sockets.size,
+    inCalls: Math.floor(activePairs.size / 2),
+    searching: waitingQueue.length,
+  })
+}
+setInterval(broadcastStats, 10000)
+
 // ─── REST: Issue reporting ──────────────────────────────────────────────────
 app.post('/api/report', (req, res) => {
   const { category, description, meta } = req.body || {}
@@ -150,6 +169,14 @@ io.on('connection', (socket) => {
   // Track username → socket for direct messaging
   userSockets.set(username, socket)
 
+  // Send current stats immediately on connect + broadcast updated count to everyone
+  socket.emit('stats', {
+    online: io.sockets.sockets.size,
+    inCalls: Math.floor(activePairs.size / 2),
+    searching: waitingQueue.length,
+  })
+  broadcastStats()
+
   // Deliver any queued crush messages
   const pending = pendingCrushMessages.get(username) || []
   if (pending.length > 0) {
@@ -239,6 +266,7 @@ io.on('connection', (socket) => {
     console.log(`❌ Disconnected: ${username} (${reason})`)
     userSockets.delete(username)
     cleanup(socket)
+    broadcastStats()
   })
 })
 
