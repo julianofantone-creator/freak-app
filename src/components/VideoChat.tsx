@@ -277,7 +277,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
           <div className="flex-1 flex flex-col items-center justify-center">
             <motion.h2 className="text-freak-pink text-5xl font-black mb-3 tracking-tighter"
               initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-              freak
+              freaky
             </motion.h2>
             <p className="text-freak-muted text-base mb-10">who are you meeting today?</p>
             <motion.button onClick={startSearch}

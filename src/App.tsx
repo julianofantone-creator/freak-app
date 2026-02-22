@@ -4,6 +4,7 @@ import { AnimatePresence } from 'framer-motion'
 import WelcomeScreen from './components/WelcomeScreen'
 import VideoChat from './components/VideoChat'
 import ReportIssue from './components/ReportIssue'
+import OnboardingModal from './components/OnboardingModal'
 import { User, ConnectionState, Crush, ChatMessage } from './types'
 
 function App() {
@@ -99,6 +100,7 @@ function App() {
         )}
       </AnimatePresence>
 
+      <OnboardingModal />
       <ReportIssue />
 
       <Toaster

@@ -23,7 +23,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart }) => {
         className="mb-12 text-center"
       >
         <h1 className="text-8xl font-black tracking-tighter text-freak-pink">
-          freak
+          freaky
         </h1>
         <p className="text-freak-muted text-lg mt-3 tracking-wide">
           meet strangers. make sparks.
