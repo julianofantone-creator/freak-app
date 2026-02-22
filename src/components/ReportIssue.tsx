@@ -51,10 +51,10 @@ const ReportIssue: React.FC = () => {
 
   return (
     <>
-      {/* Top-left text button */}
+      {/* Bottom-right — out of the way of all nav buttons */}
       <button
         onClick={() => setOpen(true)}
-        className="fixed top-3 left-4 z-50 text-white/30 hover:text-white/70 text-xs font-medium transition-colors"
+        className="fixed bottom-20 right-4 z-50 text-white/25 hover:text-white/60 text-xs font-medium transition-colors"
       >
         Report an issue
       </button>
