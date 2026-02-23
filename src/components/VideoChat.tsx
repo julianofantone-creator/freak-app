@@ -42,7 +42,6 @@ const VideoChat: React.FC<VideoChatProps> = ({
 }) => {
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
-  const selfPreviewRef = useRef<HTMLVideoElement>(null) // filter preview when not in call
   const pendingCrushIdRef = useRef<string | null>(null) // tracks last crush we sent a msg to (for ack mapping)
 
   const [isConnected, setIsConnected] = useState(false)
@@ -70,10 +69,15 @@ const VideoChat: React.FC<VideoChatProps> = ({
     activeBackground, selectBackground,
     getCanvasVideoTrack, getCanvasStream,
     filterReady, filterError,
+    canvasRef: filterCanvasRef,
   } = useCharacterOverlay({
     localStream,
     videoRef: localVideoRef,
   })
+
+  // Preview container — we inject the actual canvas element into this div
+  // (avoids captureStream → srcObject pipeline entirely; canvas renders directly)
+  const previewContainerRef = useRef<HTMLDivElement>(null)
 
   // Map username → crushId for fast lookup
   const usernameToCrushId = useCallback((uname: string) => crushes.find(c => c.username === uname)?.id, [crushes])
@@ -182,14 +186,26 @@ const VideoChat: React.FC<VideoChatProps> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCharacter, activeAccessories, activeBackground, localStream, isConnected, getCanvasVideoTrack, getCanvasStream, replaceVideoTrack])
 
-  // Self-preview: when not in a call, wire canvas (or raw) stream to the corner preview
+  // Self-preview: inject the actual canvas DOM element into the preview container
+  // Direct canvas render — no captureStream/srcObject pipeline needed for preview
   useEffect(() => {
-    if (isConnected || !selfPreviewRef.current || !localStream) return
-    const hasFilter = !!activeCharacter || activeAccessories.length > 0 || activeBackground !== 'none'
-    const canvasStream = getCanvasStream()
-    selfPreviewRef.current.srcObject = (hasFilter && canvasStream) ? canvasStream : localStream
+    const container = previewContainerRef.current
+    const canvas = filterCanvasRef.current
+    if (!container || !canvas || isConnected || !localStream) return
+
+    // Style canvas to fill the preview box
+    canvas.style.position = 'absolute'
+    canvas.style.inset = '0'
+    canvas.style.width = '100%'
+    canvas.style.height = '100%'
+    canvas.style.objectFit = 'cover'
+
+    container.appendChild(canvas)
+    return () => {
+      if (container.contains(canvas)) container.removeChild(canvas)
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCharacter, activeAccessories, activeBackground, localStream, isConnected, getCanvasStream])
+  }, [isConnected, localStream])
 
   // Mutual crush detection in date mode (both liked each other → celebrate)
   useEffect(() => {
@@ -448,25 +464,30 @@ const VideoChat: React.FC<VideoChatProps> = ({
         )}
       </div>
 
-      {/* ─── SELF PREVIEW — shows in bottom-right when filter is open but not in call ─── */}
+      {/* ─── SELF PREVIEW — direct canvas render, no captureStream needed ─── */}
       {localStream && !isConnected && (
         <motion.div
           initial={{ opacity: 0, scale: 0.8 }}
           animate={{ opacity: 1, scale: 1 }}
+          ref={previewContainerRef}
           className="absolute bottom-24 right-4 z-20 rounded-2xl overflow-hidden border-2 border-freak-pink/60 shadow-pink"
-          style={{ width: 100, height: 133 }}
+          style={{ width: 160, height: 90, position: 'absolute' }}
         >
-          <video
-            ref={selfPreviewRef}
-            autoPlay
-            muted
-            playsInline
-            className="w-full h-full object-cover"
-            style={{ transform: 'scaleX(-1)' }}
-          />
+          {/* Canvas element injected by useEffect above */}
           {(activeCharacter || activeAccessories.length > 0 || activeBackground !== 'none') && (
-            <div className="absolute bottom-1 left-0 right-0 flex justify-center">
-              <span className="text-xs bg-black/60 px-1.5 py-0.5 rounded-full text-freak-pink font-bold">LIVE</span>
+            <div className="absolute bottom-1 left-0 right-0 flex justify-center z-10 pointer-events-none">
+              <span className="text-xs bg-black/70 px-1.5 py-0.5 rounded-full text-freak-pink font-bold">LIVE</span>
+            </div>
+          )}
+          {!filterReady && (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/60 z-10">
+              <div className="flex flex-col items-center gap-1">
+                <svg className="animate-spin w-5 h-5 text-freak-pink" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                </svg>
+                <span className="text-white text-[10px]">Loading…</span>
+              </div>
             </div>
           )}
         </motion.div>

@@ -1050,6 +1050,7 @@ export function useCharacterOverlay({ localStream }: UseCharacterOverlayOptions)
     activeBackground, selectBackground,
     getCanvasVideoTrack, getCanvasStream,
     filterReady, filterError,
+    canvasRef,   // expose so VideoChat can show canvas directly in preview
     CHARACTERS,
   }
 }
