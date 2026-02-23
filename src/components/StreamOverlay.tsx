@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Minimize2, Maximize2, X, Tv } from 'lucide-react'
+import { Minimize2, Maximize2, X, Tv, ExternalLink } from 'lucide-react'
 
 interface StreamOverlayProps {
   streamerName: string
@@ -8,18 +8,29 @@ interface StreamOverlayProps {
   onClose: () => void
 }
 
+export type StreamPlatform = 'twitch' | 'youtube' | 'kick' | 'tiktok' | 'unknown'
+
+export function detectPlatform(url: string): StreamPlatform {
+  if (url.includes('twitch.tv')) return 'twitch'
+  if (url.includes('youtube.com') || url.includes('youtu.be')) return 'youtube'
+  if (url.includes('kick.com')) return 'kick'
+  if (url.includes('tiktok.com')) return 'tiktok'
+  return 'unknown'
+}
+
 function getEmbedUrl(streamUrl: string): string | null {
   try {
     const url = new URL(streamUrl)
+    const platform = detectPlatform(streamUrl)
 
     // Twitch: https://twitch.tv/username
-    if (url.hostname.includes('twitch.tv')) {
+    if (platform === 'twitch') {
       const channel = url.pathname.replace('/', '').split('/')[0]
       if (channel) return `https://player.twitch.tv/?channel=${channel}&parent=${window.location.hostname}&muted=true`
     }
 
-    // YouTube live: https://youtube.com/watch?v=ID or youtu.be/ID or /live
-    if (url.hostname.includes('youtube.com') || url.hostname.includes('youtu.be')) {
+    // YouTube live: https://youtube.com/watch?v=ID or youtu.be/ID
+    if (platform === 'youtube') {
       let videoId = url.searchParams.get('v')
       if (!videoId) videoId = url.pathname.replace('/', '').split('/').pop() || null
       if (videoId && videoId !== 'watch') {
@@ -28,11 +39,12 @@ function getEmbedUrl(streamUrl: string): string | null {
     }
 
     // Kick: https://kick.com/username
-    if (url.hostname.includes('kick.com')) {
+    if (platform === 'kick') {
       const channel = url.pathname.replace('/', '').split('/')[0]
       if (channel) return `https://player.kick.com/${channel}?muted=true`
     }
 
+    // TikTok LIVE — no embeds, returns null (handled separately as link)
     return null
   } catch {
     return null
@@ -43,21 +55,45 @@ export default function StreamOverlay({ streamerName, streamUrl, onClose }: Stre
   const [minimized, setMinimized] = useState(false)
   const embedUrl = getEmbedUrl(streamUrl)
 
+  const platform = detectPlatform(streamUrl)
+  const isTikTok = platform === 'tiktok'
+
   if (!embedUrl) {
-    // Fallback: just show a link if we can't embed
+    // TikTok or unknown — show a branded "Watch Live" card
     return (
       <motion.div
-        className="fixed bottom-20 right-4 z-40 bg-freak-surface border border-freak-border rounded-2xl p-3 flex items-center gap-2 shadow-lg"
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
+        className="fixed bottom-20 right-4 z-40 rounded-2xl overflow-hidden shadow-2xl border border-freak-border"
+        style={{ width: '200px' }}
+        initial={{ opacity: 0, scale: 0.8, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.8 }}
       >
-        <Tv size={14} className="text-freak-pink" />
-        <a href={streamUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-freak-pink hover:underline">
-          Watch {streamerName} live
-        </a>
-        <button onClick={onClose} className="text-freak-muted hover:text-white ml-1">
-          <X size={12} />
-        </button>
+        {/* Header */}
+        <div className="bg-freak-surface flex items-center justify-between px-3 py-2">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+            <span className="text-white text-xs font-medium truncate">{streamerName}</span>
+            <span className="text-freak-muted text-xs">LIVE</span>
+          </div>
+          <button onClick={onClose} className="text-freak-muted hover:text-white p-1">
+            <X size={12} />
+          </button>
+        </div>
+        {/* Watch button */}
+        <div className={`p-4 flex flex-col items-center gap-3 ${isTikTok ? 'bg-black' : 'bg-freak-bg'}`}>
+          <span className="text-3xl">{isTikTok ? '🎵' : '📺'}</span>
+          <p className="text-white text-xs text-center font-medium">
+            {isTikTok ? 'Watch on TikTok LIVE' : `Watch ${streamerName} live`}
+          </p>
+          <a
+            href={streamUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 bg-freak-pink text-white text-xs font-bold px-4 py-2 rounded-xl w-full justify-center"
+          >
+            <ExternalLink size={12} /> Watch Live
+          </a>
+        </div>
       </motion.div>
     )
   }

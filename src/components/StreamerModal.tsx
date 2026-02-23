@@ -51,6 +51,7 @@ export default function StreamerModal({ onClose }: StreamerModalProps) {
     if (url.includes('twitch.tv')) return 'twitch'
     if (url.includes('youtube.com') || url.includes('youtu.be')) return 'youtube'
     if (url.includes('kick.com')) return 'kick'
+    if (url.includes('tiktok.com')) return 'tiktok'
     return null
   }
 
@@ -131,12 +132,18 @@ export default function StreamerModal({ onClose }: StreamerModalProps) {
                       <Twitch size={16} className="text-purple-400" />
                     ) : platform === 'youtube' ? (
                       <Youtube size={16} className="text-red-400" />
+                    ) : platform === 'tiktok' ? (
+                      <span className="text-sm">🎵</span>
                     ) : (
                       <Link size={16} />
                     )}
                   </div>
                 </div>
-                <p className="text-freak-muted text-xs">Twitch, YouTube, Kick — anything works</p>
+                {platform === 'tiktok' ? (
+                  <p className="text-freak-muted text-xs">🎵 TikTok LIVE — viewers get a link to watch you live while they chat</p>
+                ) : (
+                  <p className="text-freak-muted text-xs">Twitch, YouTube, Kick, TikTok — all supported</p>
+                )}
               </div>
 
               {/* Submit */}
