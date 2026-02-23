@@ -61,26 +61,6 @@ const VideoChat: React.FC<VideoChatProps> = ({
     videoRef: localVideoRef,
   })
 
-  // When character changes: replace WebRTC track + swap local video preview to canvas
-  useEffect(() => {
-    if (!localStream) return
-    if (activeCharacter) {
-      const canvasTrack = getCanvasVideoTrack()
-      if (canvasTrack) replaceVideoTrack(canvasTrack)
-      // Show canvas stream in local video element
-      const canvasStream = getCanvasStream()
-      if (canvasStream && localVideoRef.current) {
-        localVideoRef.current.srcObject = canvasStream
-      }
-    } else {
-      // Restore camera track
-      replaceVideoTrack(null)
-      if (localVideoRef.current && localStream) {
-        localVideoRef.current.srcObject = localStream
-      }
-    }
-  }, [activeCharacter, localStream, getCanvasVideoTrack, getCanvasStream, replaceVideoTrack])
-
   // Map username → crushId for fast lookup
   const usernameToCrushId = useCallback((uname: string) => crushes.find(c => c.username === uname)?.id, [crushes])
 
@@ -165,6 +145,25 @@ const VideoChat: React.FC<VideoChatProps> = ({
       if (crushId) setCrushStatuses(prev => ({ ...prev, [crushId]: 'read' }))
     },
   })
+
+  // When character changes: replace WebRTC track + swap local video preview to canvas
+  // (must be after useFreakSocket so replaceVideoTrack is in scope)
+  useEffect(() => {
+    if (!localStream) return
+    if (activeCharacter) {
+      const canvasTrack = getCanvasVideoTrack()
+      if (canvasTrack) replaceVideoTrack(canvasTrack)
+      const canvasStream = getCanvasStream()
+      if (canvasStream && localVideoRef.current) {
+        localVideoRef.current.srcObject = canvasStream
+      }
+    } else {
+      replaceVideoTrack(null)
+      if (localVideoRef.current && localStream) {
+        localVideoRef.current.srcObject = localStream
+      }
+    }
+  }, [activeCharacter, localStream, getCanvasVideoTrack, getCanvasStream, replaceVideoTrack])
 
   const startSearch = useCallback(async () => {
     const stream = await initMedia()
