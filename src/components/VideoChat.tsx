@@ -60,7 +60,8 @@ const VideoChat: React.FC<VideoChatProps> = ({
     activeCharacter, selectCharacter,
     activeAccessories, toggleAccessory, clearAccessories,
     activeBackground, selectBackground,
-    getCanvasVideoTrack, getCanvasStream
+    getCanvasVideoTrack, getCanvasStream,
+    filterReady, filterError,
   } = useCharacterOverlay({
     localStream,
     videoRef: localVideoRef,
@@ -479,6 +480,8 @@ const VideoChat: React.FC<VideoChatProps> = ({
             onClearAccessories={clearAccessories}
             onSelectBackground={selectBackground}
             onClose={() => setShowCharacterPicker(false)}
+            filterReady={filterReady}
+            filterError={filterError}
           />
         )}
       </AnimatePresence>

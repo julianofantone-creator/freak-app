@@ -631,6 +631,8 @@ export function useCharacterOverlay({ localStream }: UseCharacterOverlayOptions)
   const [activeCharacter,    setActiveCharacter]    = useState<Character | null>(null)
   const [activeAccessories,  setActiveAccessories]  = useState<string[]>([])
   const [activeBackground,   setActiveBackground]   = useState<string>('none')
+  const [filterReady,        setFilterReady]        = useState(false)
+  const [filterError,        setFilterError]        = useState<string | null>(null)
 
   const canvasRef         = useRef<HTMLCanvasElement | null>(null)
   const canvasStreamRef   = useRef<MediaStream | null>(null)
@@ -650,36 +652,66 @@ export function useCharacterOverlay({ localStream }: UseCharacterOverlayOptions)
   // ── Init MediaPipe models ────────────────────────────────────────────────────
   useEffect(() => {
     let cancelled = false
+
+    async function tryCreateFaceLandmarker(vision: Awaited<ReturnType<typeof FilesetResolver.forVisionTasks>>, delegate: 'GPU' | 'CPU') {
+      return FaceLandmarker.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+          delegate,
+        },
+        runningMode: 'VIDEO', numFaces: 1,
+        outputFaceBlendshapes: false,
+        minFaceDetectionConfidence: 0.5, minFacePresenceScore: 0.5, minTrackingConfidence: 0.5,
+      })
+    }
+
+    async function tryCreateSegmenter(vision: Awaited<ReturnType<typeof FilesetResolver.forVisionTasks>>, delegate: 'GPU' | 'CPU') {
+      return ImageSegmenter.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite',
+          delegate,
+        },
+        runningMode: 'VIDEO',
+        outputCategoryMask: false,
+        outputConfidenceMasks: true,
+      })
+    }
+
     async function init() {
       try {
         const vision = await FilesetResolver.forVisionTasks(
           'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
         )
-        // FaceLandmarker
-        const fl = await FaceLandmarker.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
-            delegate: 'GPU',
-          },
-          runningMode: 'VIDEO', numFaces: 1,
-          outputFaceBlendshapes: false,
-          minFaceDetectionConfidence: 0.5, minFacePresenceScore: 0.5, minTrackingConfidence: 0.5,
-        })
-        // ImageSegmenter (for background replacement)
-        const seg = await ImageSegmenter.createFromOptions(vision, {
-          baseOptions: {
-            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite',
-            delegate: 'GPU',
-          },
-          runningMode: 'VIDEO',
-          outputCategoryMask: false,
-          outputConfidenceMasks: true,
-        })
+
+        // Try GPU first, fall back to CPU if GPU delegate fails
+        let fl: FaceLandmarker
+        try {
+          fl = await tryCreateFaceLandmarker(vision, 'GPU')
+          console.log('[FaceFilter] FaceLandmarker loaded (GPU)')
+        } catch {
+          console.warn('[FaceFilter] GPU delegate failed, falling back to CPU')
+          fl = await tryCreateFaceLandmarker(vision, 'CPU')
+          console.log('[FaceFilter] FaceLandmarker loaded (CPU)')
+        }
+
+        let seg: ImageSegmenter
+        try {
+          seg = await tryCreateSegmenter(vision, 'GPU')
+        } catch {
+          seg = await tryCreateSegmenter(vision, 'CPU')
+        }
+
         if (!cancelled) {
           landmarkerRef.current  = fl;  landmarkerReady.current  = true
           segmenterRef.current   = seg; segmenterReady.current   = true
+          setFilterReady(true)
+          setFilterError(null)
+          console.log('[FaceFilter] ✅ Ready')
         }
-      } catch (e) { console.warn('[FaceFilter] MediaPipe init failed', e) }
+      } catch (e) {
+        console.error('[FaceFilter] ❌ Init failed completely', e)
+        if (!cancelled) setFilterError('Face filters unavailable on this device/browser')
+      }
     }
     init()
     return () => { cancelled = true }
@@ -926,6 +958,7 @@ export function useCharacterOverlay({ localStream }: UseCharacterOverlayOptions)
     activeAccessories, toggleAccessory, clearAccessories,
     activeBackground, selectBackground,
     getCanvasVideoTrack, getCanvasStream,
+    filterReady, filterError,
     CHARACTERS,
   }
 }

@@ -16,6 +16,8 @@ interface CharacterPickerProps {
   onClearAccessories: () => void
   onSelectBackground: (id: string) => void
   onClose: () => void
+  filterReady?: boolean
+  filterError?: string | null
 }
 
 export default function CharacterPicker({
@@ -27,6 +29,8 @@ export default function CharacterPicker({
   onClearAccessories,
   onSelectBackground,
   onClose,
+  filterReady = false,
+  filterError = null,
 }: CharacterPickerProps) {
   const [tab, setTab] = useState<'characters' | 'accessories' | 'backgrounds'>('characters')
   const [accCat, setAccCat] = useState<AccessoryCategory>('head')
@@ -78,6 +82,29 @@ export default function CharacterPicker({
             ))}
           </div>
         </div>
+
+        {/* Status banner */}
+        {filterError && (
+          <div className="mx-4 mt-3 px-4 py-2.5 rounded-xl bg-red-500/15 border border-red-500/30 flex items-center gap-2">
+            <span className="text-lg">⚠️</span>
+            <p className="text-red-400 text-xs leading-snug">{filterError}<br /><span className="text-red-300/70">Try Chrome on Android or Safari on iOS 15+.</span></p>
+          </div>
+        )}
+        {!filterReady && !filterError && (
+          <div className="mx-4 mt-3 px-4 py-2.5 rounded-xl bg-freak-surface border border-freak-border flex items-center gap-2">
+            <svg className="animate-spin w-4 h-4 text-freak-pink shrink-0" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+            </svg>
+            <p className="text-freak-muted text-xs">Loading face detection… first load takes ~5s</p>
+          </div>
+        )}
+        {filterReady && !filterError && (
+          <div className="mx-4 mt-3 px-4 py-2 rounded-xl bg-green-500/10 border border-green-500/20 flex items-center gap-2">
+            <span className="text-green-400 text-sm">✓</span>
+            <p className="text-green-400 text-xs">Face detection ready — join a call to see your filter</p>
+          </div>
+        )}
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-4 py-4">
