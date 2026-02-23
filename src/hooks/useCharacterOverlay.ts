@@ -584,8 +584,8 @@ function drawCheeks(ctx: CanvasRenderingContext2D, char: Character,
   ctx.restore()
 }
 
-// ─── Head yaw estimation (left/right rotation) ────────────────────────────────
-// Returns -1 (full right) to +1 (full left), 0 = straight
+// ─── Head pose estimation ─────────────────────────────────────────────────────
+// Yaw: -1 (looking right) to +1 (looking left)
 function computeHeadYaw(landmarks: NormalizedLandmark[], W: number, H: number): number {
   const nose    = lm(landmarks, LM_NOSE_TIP,   W, H)
   const leftEar = lm(landmarks, LM_LEFT_EAR,   W, H)
@@ -594,6 +594,16 @@ function computeHeadYaw(landmarks: NormalizedLandmark[], W: number, H: number): 
   const faceW   = Math.abs(rightEar.x - leftEar.x)
   if (faceW < 1) return 0
   return Math.max(-1, Math.min(1, (nose.x - faceCX) / (faceW * 0.5)))
+}
+
+// Roll: radians of head tilt (clockwise = positive)
+// Derived from angle of ear axis — the most visible motion in TheBurntPeanut
+function computeHeadRoll(landmarks: NormalizedLandmark[], W: number, H: number): number {
+  const earL = lm(landmarks, LM_LEFT_EAR,  W, H)  // right side of mirrored canvas
+  const earR = lm(landmarks, LM_RIGHT_EAR, W, H)  // left side of mirrored canvas
+  // Angle of vector earR → earL
+  const angle = Math.atan2(earL.y - earR.y, earL.x - earR.x)
+  return Math.max(-0.38, Math.min(0.38, angle))    // clamp to ±~22°
 }
 
 function drawNameTag(ctx: CanvasRenderingContext2D, char: Character,
@@ -773,14 +783,17 @@ export function useCharacterOverlay({ localStream }: UseCharacterOverlayOptions)
           const faceW     = Math.abs(rightEarP.x - leftEarP.x)
           const faceH     = chinP.y - foreheadP.y
           const yaw       = computeHeadYaw(landmarks, W, H)
+          const roll      = computeHeadRoll(landmarks, W, H)
           // Perspective squeeze: face squishes when turned (3D illusion)
           const squeeze   = Math.max(0.55, 1 - Math.abs(yaw) * 0.28)
 
           if (char) {
-            // ── Apply head-rotation perspective transform to entire character ──
+            // ── Apply head-rotation transform: roll tilt + yaw squeeze ──────
+            // This makes the ENTIRE character tilt with the head (TheBurntPeanut mechanic)
             ctx.save()
             ctx.translate(faceCX, faceCY)
-            ctx.scale(squeeze, 1)
+            ctx.rotate(roll)           // tilt entire character with head roll
+            ctx.scale(squeeze, 1)      // perspective foreshortening for yaw
             ctx.translate(-faceCX, -faceCY)
 
             // Character body (extended shape beyond face oval)
@@ -838,6 +851,36 @@ export function useCharacterOverlay({ localStream }: UseCharacterOverlayOptions)
 
             // Composite face mask onto main canvas (inherits ctx perspective transform)
             ctx.drawImage(maskCanvas, 0, 0)
+
+            // ── Face skin tint: color-grade real face to match character ──
+            // Tints the real face area (visible through eye/mouth holes) with
+            // the character's skin tone — makes you look like you ARE the character
+            ctx.save()
+            tracePoly(ctx, landmarks, FACE_OVAL, W, H)
+            ctx.clip()
+            // Use character skin color at low opacity over the face area
+            ctx.fillStyle = char.skin.replace(/[\d.]+\)$/, '0.22)')
+            ctx.fillRect(0, 0, W, H)
+            ctx.restore()
+
+            // ── Character eye outlines: draw cartoon eye rings over real eyes ──
+            // Makes real eyes look like character eyes instead of random human eyes
+            const leftEyeCenter  = { x: lm(landmarks,385,W,H).x * 0.5 + lm(landmarks,386,W,H).x * 0.5,
+                                      y: lm(landmarks,385,W,H).y * 0.5 + lm(landmarks,386,W,H).y * 0.5 }
+            const rightEyeCenter = { x: lm(landmarks,160,W,H).x * 0.5 + lm(landmarks,159,W,H).x * 0.5,
+                                      y: lm(landmarks,160,W,H).y * 0.5 + lm(landmarks,159,W,H).y * 0.5 }
+            const eyeOutlineR    = faceH * 0.055
+            ctx.save()
+            ;[leftEyeCenter, rightEyeCenter].forEach(eye => {
+              // Outer ring in character skin color
+              ctx.beginPath()
+              ctx.arc(eye.x, eye.y, eyeOutlineR * 1.5, 0, Math.PI * 2)
+              ctx.strokeStyle = char.eyeRing ?? char.skin
+              ctx.lineWidth = faceH * 0.022
+              ctx.stroke()
+            })
+            ctx.restore()
+
             drawDecorations(ctx, char, landmarks, W, H)
             drawNameTag(ctx, char, landmarks, W, H)
 
@@ -845,9 +888,11 @@ export function useCharacterOverlay({ localStream }: UseCharacterOverlayOptions)
           }
 
           if (accs.length > 0) {
-            // Accessories also get perspective transform
+            // Accessories also get full head pose transform (roll + yaw)
             ctx.save()
-            ctx.translate(faceCX, faceCY); ctx.scale(squeeze, 1); ctx.translate(-faceCX, -faceCY)
+            ctx.translate(faceCX, faceCY)
+            ctx.rotate(roll); ctx.scale(squeeze, 1)
+            ctx.translate(-faceCX, -faceCY)
             drawAccessories(ctx, accs, landmarks, W, H)
             ctx.restore()
           }
