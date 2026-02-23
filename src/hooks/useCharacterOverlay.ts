@@ -584,6 +584,18 @@ function drawCheeks(ctx: CanvasRenderingContext2D, char: Character,
   ctx.restore()
 }
 
+// ─── Head yaw estimation (left/right rotation) ────────────────────────────────
+// Returns -1 (full right) to +1 (full left), 0 = straight
+function computeHeadYaw(landmarks: NormalizedLandmark[], W: number, H: number): number {
+  const nose    = lm(landmarks, LM_NOSE_TIP,   W, H)
+  const leftEar = lm(landmarks, LM_LEFT_EAR,   W, H)
+  const rightEar= lm(landmarks, LM_RIGHT_EAR,  W, H)
+  const faceCX  = (leftEar.x + rightEar.x) / 2
+  const faceW   = Math.abs(rightEar.x - leftEar.x)
+  if (faceW < 1) return 0
+  return Math.max(-1, Math.min(1, (nose.x - faceCX) / (faceW * 0.5)))
+}
+
 function drawNameTag(ctx: CanvasRenderingContext2D, char: Character,
                      landmarks: NormalizedLandmark[], W: number, H: number) {
   const chin=lm(landmarks,LM_CHIN,W,H)
@@ -751,31 +763,94 @@ export function useCharacterOverlay({ localStream }: UseCharacterOverlayOptions)
         } catch (_) {}
 
         if (landmarks) {
+          // ── Compute head pose ─────────────────────────────────────────
+          const foreheadP = lm(landmarks, LM_FOREHEAD,   W, H)
+          const chinP     = lm(landmarks, LM_CHIN,        W, H)
+          const leftEarP  = lm(landmarks, LM_LEFT_EAR,   W, H)
+          const rightEarP = lm(landmarks, LM_RIGHT_EAR,  W, H)
+          const faceCX    = (leftEarP.x + rightEarP.x) / 2
+          const faceCY    = (foreheadP.y + chinP.y) / 2
+          const faceW     = Math.abs(rightEarP.x - leftEarP.x)
+          const faceH     = chinP.y - foreheadP.y
+          const yaw       = computeHeadYaw(landmarks, W, H)
+          // Perspective squeeze: face squishes when turned (3D illusion)
+          const squeeze   = Math.max(0.55, 1 - Math.abs(yaw) * 0.28)
+
           if (char) {
+            // ── Apply head-rotation perspective transform to entire character ──
+            ctx.save()
+            ctx.translate(faceCX, faceCY)
+            ctx.scale(squeeze, 1)
+            ctx.translate(-faceCX, -faceCY)
+
             // Character body (extended shape beyond face oval)
             drawCharacterBody(ctx, char, landmarks, W, H)
 
-            // Face mask on offscreen canvas with eye/mouth cutouts
+            // ── Face mask on offscreen canvas ──────────────────────────
             mctx.clearRect(0, 0, W, H)
+            // Blur for feathered edges (makes skin-to-face transition soft)
+            mctx.filter = 'blur(4px)'
+
             drawCheeks(mctx as unknown as CanvasRenderingContext2D, char, landmarks, W, H)
+
+            // Face skin polygon
             mctx.fillStyle = char.skin
             tracePoly(mctx as unknown as CanvasRenderingContext2D, landmarks, FACE_OVAL, W, H); mctx.fill()
+
+            // Eye rings
             if (char.eyeRing) {
-              const expand = (lm(landmarks,LM_CHIN,W,H).y-lm(landmarks,LM_FOREHEAD,W,H).y)*0.025
+              const expand = faceH * 0.025
               mctx.fillStyle = char.eyeRing
               expandPoly(mctx as unknown as CanvasRenderingContext2D, landmarks, LEFT_EYE,  W, H, expand); mctx.fill()
               expandPoly(mctx as unknown as CanvasRenderingContext2D, landmarks, RIGHT_EYE, W, H, expand); mctx.fill()
             }
+
+            // Punch eye + mouth cutouts (blurred = soft edges through character skin)
             mctx.globalCompositeOperation = 'destination-out'
             tracePoly(mctx as unknown as CanvasRenderingContext2D, landmarks, LEFT_EYE,   W, H); mctx.fill()
             tracePoly(mctx as unknown as CanvasRenderingContext2D, landmarks, RIGHT_EYE,  W, H); mctx.fill()
             tracePoly(mctx as unknown as CanvasRenderingContext2D, landmarks, LIPS_OUTER, W, H); mctx.fill()
+
+            // ── 3D shading — source-atop means it only draws where face skin exists ──
+            mctx.globalCompositeOperation = 'source-atop'
+            mctx.filter = 'none'  // no blur on shading gradients
+
+            // Specular highlight: bright spot upper-left, shifts with head rotation
+            const lightX = faceCX - faceW * (0.22 - yaw * 0.28)
+            const lightY = foreheadP.y + faceH * 0.18
+            const hlGrad = mctx.createRadialGradient(lightX, lightY, 0, faceCX, foreheadP.y + faceH*0.42, faceH*0.55)
+            hlGrad.addColorStop(0,    'rgba(255,255,255,0.38)')
+            hlGrad.addColorStop(0.45, 'rgba(255,255,255,0.07)')
+            hlGrad.addColorStop(1,    'rgba(0,0,0,0)')
+            mctx.fillStyle = hlGrad; mctx.fillRect(0, 0, W, H)
+
+            // Edge shadow: darkens the perimeter to give spherical volume
+            const shadowCX = faceCX + yaw * faceW * 0.12
+            const shGrad = mctx.createRadialGradient(
+              shadowCX, foreheadP.y + faceH*0.45, faceH * 0.16,
+              shadowCX, foreheadP.y + faceH*0.45, faceH * 0.60
+            )
+            shGrad.addColorStop(0, 'rgba(0,0,0,0)')
+            shGrad.addColorStop(1, 'rgba(0,0,0,0.44)')
+            mctx.fillStyle = shGrad; mctx.fillRect(0, 0, W, H)
+
             mctx.globalCompositeOperation = 'source-over'
+
+            // Composite face mask onto main canvas (inherits ctx perspective transform)
             ctx.drawImage(maskCanvas, 0, 0)
             drawDecorations(ctx, char, landmarks, W, H)
             drawNameTag(ctx, char, landmarks, W, H)
+
+            ctx.restore()  // remove perspective transform
           }
-          if (accs.length > 0) drawAccessories(ctx, accs, landmarks, W, H)
+
+          if (accs.length > 0) {
+            // Accessories also get perspective transform
+            ctx.save()
+            ctx.translate(faceCX, faceCY); ctx.scale(squeeze, 1); ctx.translate(-faceCX, -faceCY)
+            drawAccessories(ctx, accs, landmarks, W, H)
+            ctx.restore()
+          }
         } else {
           ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.font = '15px sans-serif'
           ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
