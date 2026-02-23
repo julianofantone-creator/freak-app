@@ -1,11 +1,27 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { Toaster } from 'react-hot-toast'
 import { AnimatePresence } from 'framer-motion'
 import WelcomeScreen from './components/WelcomeScreen'
 import VideoChat from './components/VideoChat'
 import ReportIssue from './components/ReportIssue'
 import OnboardingModal from './components/OnboardingModal'
+import StreamerBanner from './components/StreamerBanner'
 import { User, ConnectionState, Crush, ChatMessage } from './types'
+
+const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'https://freak-app-production.up.railway.app'
+
+interface StreamerInfo {
+  streamerName: string
+  streamUrl: string
+  code: string
+}
+
+interface PremiumState {
+  isPremium: boolean
+  expiresAt?: string
+  streamerName?: string
+  daysLeft?: number
+}
 
 function App() {
   const [user, setUser] = useState<User | null>(() => {
@@ -25,7 +41,6 @@ function App() {
     } catch { return [] }
   })
 
-  // Messages per crush: { [crushId]: ChatMessage[] }
   const [crushMessages, setCrushMessages] = useState<Record<string, ChatMessage[]>>(() => {
     try {
       const saved = localStorage.getItem('freak_crush_messages')
@@ -33,9 +48,109 @@ function App() {
     } catch { return {} }
   })
 
+  // Streamer / premium state
+  const [streamerInfo, setStreamerInfo] = useState<StreamerInfo | null>(null)
+  const [premium, setPremium] = useState<PremiumState>({ isPremium: false })
+  const [showBanner, setShowBanner] = useState(false)
+
+  // ── On mount: check for ?ref= code ────────────────────────────────────────
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const refCode = params.get('ref')
+    if (!refCode) return
+
+    // Clean URL without reload
+    window.history.replaceState({}, '', window.location.pathname)
+
+    const stored = localStorage.getItem('freak_ref_code')
+    if (stored === refCode) {
+      // Already redeemed — just load the streamer info again
+      loadStreamerInfo(refCode)
+      checkPremium()
+      return
+    }
+
+    // New ref — fetch streamer info + redeem
+    loadStreamerInfo(refCode, true)
+  }, [])
+
+  // ── On mount: check existing premium ──────────────────────────────────────
+  useEffect(() => {
+    checkPremium()
+  }, [user])
+
+  async function loadStreamerInfo(code: string, redeem = false) {
+    try {
+      const res = await fetch(`${SERVER_URL}/api/streamer/${code}`)
+      if (!res.ok) return
+      const data = await res.json()
+      setStreamerInfo({ streamerName: data.streamerName, streamUrl: data.streamUrl, code })
+      localStorage.setItem('freak_stream_url', data.streamUrl)
+      localStorage.setItem('freak_streamer_name', data.streamerName)
+      localStorage.setItem('freak_ref_code', code)
+
+      if (redeem) {
+        await redeemRef(code)
+      } else {
+        checkPremium()
+      }
+    } catch { /* silently fail */ }
+  }
+
+  async function redeemRef(code: string) {
+    const userId = user?.id || localStorage.getItem('freak_anon_id') || generateAnonId()
+    try {
+      const res = await fetch(`${SERVER_URL}/api/streamer/redeem`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, userId }),
+      })
+      if (!res.ok) return
+      const data = await res.json()
+      if (data.success) {
+        const daysLeft = Math.ceil((new Date(data.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+        setPremium({ isPremium: true, expiresAt: data.expiresAt, streamerName: data.streamerName, daysLeft })
+        localStorage.setItem('freak_premium', JSON.stringify({ expiresAt: data.expiresAt, streamerName: data.streamerName }))
+        setShowBanner(true)
+      }
+    } catch { /* silently fail */ }
+  }
+
+  async function checkPremium() {
+    // Check localStorage cache first
+    try {
+      const cached = localStorage.getItem('freak_premium')
+      if (cached) {
+        const p = JSON.parse(cached)
+        if (new Date(p.expiresAt) > new Date()) {
+          const daysLeft = Math.ceil((new Date(p.expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
+          setPremium({ isPremium: true, expiresAt: p.expiresAt, streamerName: p.streamerName, daysLeft })
+
+          // Restore streamer info if available
+          const streamUrl = localStorage.getItem('freak_stream_url')
+          const streamerName = localStorage.getItem('freak_streamer_name')
+          const code = localStorage.getItem('freak_ref_code')
+          if (streamUrl && streamerName && code) {
+            setStreamerInfo({ streamerName, streamUrl, code })
+          }
+          return
+        } else {
+          localStorage.removeItem('freak_premium')
+        }
+      }
+    } catch { /* silently fail */ }
+  }
+
+  function generateAnonId() {
+    const id = `anon_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`
+    localStorage.setItem('freak_anon_id', id)
+    return id
+  }
+
   const handleStart = useCallback((username: string) => {
+    const anonId = localStorage.getItem('freak_anon_id') || generateAnonId()
     const u: User = {
-      id: Date.now().toString(),
+      id: anonId,
       username,
       interests: [],
       joinedAt: new Date(),
@@ -43,6 +158,13 @@ function App() {
     }
     setUser(u)
     localStorage.setItem('freak_user', JSON.stringify(u))
+
+    // Redeem any pending ref
+    const refCode = localStorage.getItem('freak_ref_code')
+    const alreadyPremium = localStorage.getItem('freak_premium')
+    if (refCode && !alreadyPremium) {
+      redeemRef(refCode)
+    }
   }, [])
 
   const handleAddCrush = useCallback((crush: Crush) => {
@@ -74,8 +196,6 @@ function App() {
         localStorage.setItem('freak_crush_messages', JSON.stringify(next))
         return next
       })
-
-      // Messages are stored locally — real-time relay works when both users are in the same session
     },
     []
   )
@@ -84,7 +204,7 @@ function App() {
     <div className="min-h-screen bg-black">
       <AnimatePresence mode="wait">
         {!user ? (
-          <WelcomeScreen key="welcome" onStart={handleStart} />
+          <WelcomeScreen key="welcome" onStart={handleStart} premium={premium} streamerInfo={streamerInfo} />
         ) : (
           <VideoChat
             key="chat"
@@ -96,9 +216,20 @@ function App() {
             onAddCrush={handleAddCrush}
             onSendCrushMessage={handleSendCrushMessage}
             onUpdateCrushEmoji={handleUpdateCrushEmoji}
+            premium={premium}
+            streamerInfo={streamerInfo}
           />
         )}
       </AnimatePresence>
+
+      {/* Streamer welcome banner */}
+      {showBanner && premium.streamerName && (
+        <StreamerBanner
+          streamerName={premium.streamerName}
+          daysLeft={premium.daysLeft ?? 7}
+          onDismiss={() => setShowBanner(false)}
+        />
+      )}
 
       <OnboardingModal />
       <ReportIssue />

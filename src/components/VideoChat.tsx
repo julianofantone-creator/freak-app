@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Heart, SkipForward, Square, Video, VideoOff, Mic, MicOff } from 'lucide-react'
+import { Heart, SkipForward, Square, Video, VideoOff, Mic, MicOff, Zap } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { User, ConnectionState, Crush, ChatMessage } from '../types'
 import CrushesPanel from './CrushesPanel'
+import StreamOverlay from './StreamOverlay'
 import { useFreakSocket } from '../hooks/useFreakSocket'
 
 interface VideoChatProps {
@@ -15,6 +16,8 @@ interface VideoChatProps {
   onAddCrush: (crush: Crush) => void
   onSendCrushMessage: (crushId: string, msg: Omit<ChatMessage, 'id' | 'timestamp'>) => void
   onUpdateCrushEmoji: (crushId: string, emoji: string) => void
+  premium?: { isPremium: boolean; streamerName?: string; daysLeft?: number }
+  streamerInfo?: { streamerName: string; streamUrl: string; code: string } | null
 }
 
 const VideoChat: React.FC<VideoChatProps> = ({
@@ -25,6 +28,8 @@ const VideoChat: React.FC<VideoChatProps> = ({
   onAddCrush,
   onSendCrushMessage,
   onUpdateCrushEmoji,
+  premium,
+  streamerInfo,
 }) => {
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
@@ -41,6 +46,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
   const [incomingCrush, setIncomingCrush] = useState<{ username: string } | null>(null)
   // Per-crush delivery/read status: crushId → status (for the last sent message)
   const [crushStatuses, setCrushStatuses] = useState<Record<string, 'sent' | 'delivered' | 'queued' | 'read'>>({})
+  const [showStream, setShowStream] = useState(true) // stream overlay visible by default for Freaky+ users
   // Map username → crushId for fast lookup
   const usernameToCrushId = useCallback((uname: string) => crushes.find(c => c.username === uname)?.id, [crushes])
 
@@ -236,8 +242,16 @@ const VideoChat: React.FC<VideoChatProps> = ({
                 </div>
               )}
               {/* Your name badge */}
-              <div className="absolute top-3 left-3 bg-black/50 backdrop-blur-sm px-3 py-1 rounded-full">
-                <span className="text-white text-sm font-semibold">{_user.username} (you)</span>
+              <div className="absolute top-3 left-3 flex items-center gap-1.5">
+                <div className="bg-black/50 backdrop-blur-sm px-3 py-1 rounded-full">
+                  <span className="text-white text-sm font-semibold">{_user.username} (you)</span>
+                </div>
+                {premium?.isPremium && (
+                  <div className="bg-freak-pink/90 backdrop-blur-sm px-2 py-1 rounded-full flex items-center gap-1">
+                    <Zap className="w-3 h-3 text-white fill-white" />
+                    <span className="text-white text-xs font-bold">Freaky+</span>
+                  </div>
+                )}
               </div>
             </div>
           </>
@@ -399,6 +413,31 @@ const VideoChat: React.FC<VideoChatProps> = ({
             onSendReadReceipt={sendReadReceipt} />
         )}
       </AnimatePresence>
+
+      {/* ─── STREAM OVERLAY — shown for Freaky+ viewers ─── */}
+      <AnimatePresence>
+        {premium?.isPremium && streamerInfo && showStream && (
+          <StreamOverlay
+            streamerName={streamerInfo.streamerName}
+            streamUrl={streamerInfo.streamUrl}
+            onClose={() => setShowStream(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* ─── STREAM RESTORE BUTTON — if overlay was closed ─── */}
+      {premium?.isPremium && streamerInfo && !showStream && (
+        <motion.button
+          onClick={() => setShowStream(true)}
+          className="absolute bottom-24 right-4 z-10 flex items-center gap-1.5 bg-black/60 backdrop-blur-sm border border-freak-pink/40 px-3 py-2 rounded-full"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          whileTap={{ scale: 0.9 }}
+        >
+          <Zap className="w-3.5 h-3.5 text-freak-pink" />
+          <span className="text-freak-pink text-xs font-medium">Stream</span>
+        </motion.button>
+      )}
     </div>
   )
 }

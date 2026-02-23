@@ -31,7 +31,12 @@ const userSockets = new Map() // username → socket (for direct messaging)
 const pendingCrushMessages = new Map() // username → [{ id, from, type, text, mediaUrl, timestamp }]
 const reports = [] // [{ id, category, description, meta, timestamp }]
 
+// ─── Streamer mode state ───────────────────────────────────────────────────
+const streamerCodes = new Map() // code → { streamerName, streamUrl, createdAt, clicks, referrals }
+const premiumUsers = new Map()  // userId → { expiresAt, grantedBy, streamerName }
+
 const ADMIN_KEY = process.env.ADMIN_KEY || 'freak-admin-2026'
+const FRONTEND_DOMAIN = (process.env.FRONTEND_URL || 'https://freak.cool').replace(/\/$/, '')
 
 // ─── REST: Guest auth ───────────────────────────────────────────────────────
 app.post('/api/guest', (req, res) => {
@@ -95,6 +100,92 @@ app.patch('/api/reports/:id', (req, res) => {
   if (req.body.status) report.status = req.body.status
   if (req.body.note) report.note = req.body.note
   res.json({ success: true, report })
+})
+
+// ─── Streamer mode endpoints ───────────────────────────────────────────────
+
+// Register as a streamer — returns a unique ref link
+app.post('/api/streamer/register', (req, res) => {
+  const { streamerName, streamUrl } = req.body || {}
+  if (!streamerName?.trim()) return res.status(400).json({ error: 'Streamer name required' })
+  if (!streamUrl?.trim()) return res.status(400).json({ error: 'Stream URL required' })
+
+  // Generate short code from name + random suffix
+  const slug = streamerName.trim().toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 12)
+  const code = `${slug}${Math.random().toString(36).slice(2, 6)}`
+
+  streamerCodes.set(code, {
+    streamerName: streamerName.trim().slice(0, 30),
+    streamUrl: streamUrl.trim().slice(0, 200),
+    createdAt: new Date().toISOString(),
+    clicks: 0,
+    referrals: 0,
+  })
+
+  const refUrl = `${FRONTEND_DOMAIN}/?ref=${code}`
+  console.log(`🎮 New streamer: ${streamerName} → ${refUrl}`)
+  res.json({ success: true, code, refUrl })
+})
+
+// Get streamer info by code (called when viewer lands with ?ref=)
+app.get('/api/streamer/:code', (req, res) => {
+  const streamer = streamerCodes.get(req.params.code)
+  if (!streamer) return res.status(404).json({ error: 'Invalid code' })
+
+  // Track click
+  streamer.clicks++
+  res.json({
+    streamerName: streamer.streamerName,
+    streamUrl: streamer.streamUrl,
+    code: req.params.code,
+  })
+})
+
+// Redeem referral code → grant 7 days of Freaky+
+app.post('/api/streamer/redeem', (req, res) => {
+  const { code, userId } = req.body || {}
+  if (!code || !userId) return res.status(400).json({ error: 'code + userId required' })
+
+  const streamer = streamerCodes.get(code)
+  if (!streamer) return res.status(404).json({ error: 'Invalid code' })
+
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
+  premiumUsers.set(userId, {
+    expiresAt,
+    grantedBy: code,
+    streamerName: streamer.streamerName,
+  })
+  streamer.referrals++
+
+  console.log(`⚡ Freaky+ granted to ${userId} via ${streamer.streamerName} (expires ${expiresAt})`)
+  res.json({ success: true, expiresAt, streamerName: streamer.streamerName })
+})
+
+// Check premium status for a userId
+app.get('/api/premium/:userId', (req, res) => {
+  const prem = premiumUsers.get(req.params.userId)
+  if (!prem) return res.json({ isPremium: false })
+
+  const expired = new Date(prem.expiresAt) < new Date()
+  if (expired) {
+    premiumUsers.delete(req.params.userId)
+    return res.json({ isPremium: false })
+  }
+  res.json({ isPremium: true, expiresAt: prem.expiresAt, streamerName: prem.streamerName })
+})
+
+// Streamer dashboard — see your stats
+app.get('/api/streamer/:code/stats', (req, res) => {
+  const streamer = streamerCodes.get(req.params.code)
+  if (!streamer) return res.status(404).json({ error: 'Invalid code' })
+  res.json({
+    streamerName: streamer.streamerName,
+    streamUrl: streamer.streamUrl,
+    clicks: streamer.clicks,
+    referrals: streamer.referrals,
+    createdAt: streamer.createdAt,
+    refUrl: `${FRONTEND_DOMAIN}/?ref=${req.params.code}`,
+  })
 })
 
 // ─── Socket auth middleware ─────────────────────────────────────────────────
