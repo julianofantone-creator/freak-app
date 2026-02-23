@@ -694,9 +694,11 @@ function drawNameTag(ctx: CanvasRenderingContext2D, char: Character,
 interface UseCharacterOverlayOptions {
   localStream: MediaStream | null
   videoRef: React.RefObject<HTMLVideoElement>
+  /** Optional canvas element to blit every frame into (for live preview) */
+  displayCanvasRef?: React.RefObject<HTMLCanvasElement>
 }
 
-export function useCharacterOverlay({ localStream }: UseCharacterOverlayOptions) {
+export function useCharacterOverlay({ localStream, displayCanvasRef }: UseCharacterOverlayOptions) {
   const [activeCharacter,    setActiveCharacter]    = useState<Character | null>(null)
   const [activeAccessories,  setActiveAccessories]  = useState<string[]>([])
   const [activeBackground,   setActiveBackground]   = useState<string>('none')
@@ -1066,6 +1068,13 @@ export function useCharacterOverlay({ localStream }: UseCharacterOverlayOptions)
         }
       }
 
+      // Blit to display canvas (preview pane) if provided
+      const dc = displayCanvasRef?.current
+      if (dc) {
+        const dctx = dc.getContext('2d')
+        if (dctx) dctx.drawImage(canvas, 0, 0, dc.width, dc.height)
+      }
+
       rafRef.current = requestAnimationFrame(draw)
     }
 
@@ -1074,7 +1083,7 @@ export function useCharacterOverlay({ localStream }: UseCharacterOverlayOptions)
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
       vid.srcObject = null; canvasStreamRef.current = null; canvasRef.current = null
     }
-  }, [localStream])
+  }, [localStream, displayCanvasRef])
 
   const getCanvasVideoTrack = useCallback((): MediaStreamTrack | null => canvasStreamRef.current?.getVideoTracks()[0] ?? null, [])
   const getCanvasStream     = useCallback((): MediaStream | null => canvasStreamRef.current, [])

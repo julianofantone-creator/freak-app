@@ -42,8 +42,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
 }) => {
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
-  const localVideoContainerRef = useRef<HTMLDivElement>(null)
-  const previewContainerRef = useRef<HTMLDivElement>(null)
+  const previewCanvasRef = useRef<HTMLCanvasElement>(null)
   const pendingCrushIdRef = useRef<string | null>(null) // tracks last crush we sent a msg to (for ack mapping)
 
   const [isConnected, setIsConnected] = useState(false)
@@ -71,10 +70,10 @@ const VideoChat: React.FC<VideoChatProps> = ({
     activeBackground, selectBackground,
     getCanvasVideoTrack,
     filterReady, filterError,
-    canvasRef: filterCanvasRef,
   } = useCharacterOverlay({
     localStream,
     videoRef: localVideoRef,
+    displayCanvasRef: previewCanvasRef,
   })
 
   // Map username → crushId for fast lookup
@@ -162,29 +161,14 @@ const VideoChat: React.FC<VideoChatProps> = ({
     },
   })
 
-  // ── Canvas DOM injection ─────────────────────────────────────────────────
-  // Directly appends the offscreen canvas element into the appropriate container
-  // div. Bypasses canvas.captureStream() entirely — avoids iOS Safari breakage.
-  // When idle: canvas → previewContainerRef (160×90 corner preview)
-  // When connected: canvas → localVideoContainerRef (in-call local video slot)
+  // ── Local video element srcObject ───────────────────────────────────────
+  // Keep the in-call local video showing the raw camera feed.
   useEffect(() => {
-    const canvas = filterCanvasRef.current
-    if (!canvas || !localStream) return
-
-    const container = isConnected
-      ? localVideoContainerRef.current
-      : previewContainerRef.current
-    if (!container) return
-
-    canvas.style.width = '100%'
-    canvas.style.height = '100%'
-    canvas.style.display = 'block'
-    container.appendChild(canvas)
-
-    return () => {
-      if (container.contains(canvas)) container.removeChild(canvas)
+    if (localVideoRef.current && localStream) {
+      localVideoRef.current.srcObject = localStream
+      localVideoRef.current.play().catch(() => {})
     }
-  }, [localStream, isConnected, filterCanvasRef])
+  }, [localStream])
 
   // ── WebRTC track swap ────────────────────────────────────────────────────
   // Replaces the outgoing video track with the canvas track when a filter is
@@ -331,8 +315,14 @@ const VideoChat: React.FC<VideoChatProps> = ({
 
             {/* ── LOCAL VIDEO (bottom on mobile / right on desktop) ── */}
             <div className="flex-1 relative bg-freak-surface min-h-0">
-              {/* Canvas injected here by useEffect — shows raw camera or filtered output */}
-              <div ref={localVideoContainerRef} className="w-full h-full overflow-hidden" />
+              <video
+                ref={localVideoRef}
+                autoPlay
+                muted
+                playsInline
+                className="w-full h-full object-cover"
+                style={{ transform: 'scaleX(-1)' }}
+              />
               {!isVideoOn && (
                 <div className="absolute inset-0 bg-freak-surface flex items-center justify-center">
                   <VideoOff className="w-8 h-8 text-freak-muted" />
@@ -452,8 +442,8 @@ const VideoChat: React.FC<VideoChatProps> = ({
         )}
       </div>
 
-      {/* ─── SELF PREVIEW — shows your camera (+ filter) when not in a call ─── */}
-      {/* Canvas is injected directly by useEffect — no captureStream needed (iOS safe) */}
+      {/* ─── SELF PREVIEW — live canvas blit from filter hook ─── */}
+      {/* Canvas element lives permanently in DOM; hook blits every frame into it */}
       {localStream && !isConnected && (
         <motion.div
           initial={{ opacity: 0, scale: 0.8 }}
@@ -461,7 +451,8 @@ const VideoChat: React.FC<VideoChatProps> = ({
           className="absolute bottom-24 right-4 z-20 rounded-2xl overflow-hidden border-2 border-freak-pink/60 shadow-pink"
           style={{ width: 160, height: 90 }}
         >
-          <div ref={previewContainerRef} className="w-full h-full" />
+          {/* width/height = internal resolution; CSS sizes the display */}
+          <canvas ref={previewCanvasRef} width={320} height={180} style={{ width: '100%', height: '100%', display: 'block' }} />
           {!filterReady && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/70">
               <div className="flex flex-col items-center gap-1">
