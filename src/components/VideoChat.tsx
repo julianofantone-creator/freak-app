@@ -69,14 +69,6 @@ const VideoChat: React.FC<VideoChatProps> = ({
   // Map username → crushId for fast lookup
   const usernameToCrushId = useCallback((uname: string) => crushes.find(c => c.username === uname)?.id, [crushes])
 
-  // Re-attach local stream whenever it changes or we enter connected view
-  // (React re-mounts the video element on state transitions, srcObject gets lost)
-  useEffect(() => {
-    if (localVideoRef.current && localStream) {
-      localVideoRef.current.srcObject = localStream
-    }
-  }, [localStream, isConnected])
-
   // Camera init — must be on user tap for iOS/Android
   const initMedia = useCallback(async () => {
     if (localStream) return localStream
@@ -151,9 +143,9 @@ const VideoChat: React.FC<VideoChatProps> = ({
     },
   })
 
-  // When character changes: replace WebRTC track + swap local video preview to canvas
-  // (must be after useFreakSocket so replaceVideoTrack is in scope)
-  // Swap WebRTC track to canvas when character OR accessories are active
+  // Swap WebRTC track + local video preview to canvas when filter is active.
+  // isConnected is in deps so this re-fires when the local <video> element mounts/unmounts
+  // (prevents the old re-attach logic from clobbering the canvas stream on connection).
   useEffect(() => {
     if (!localStream) return
     const hasFilter = !!activeCharacter || activeAccessories.length > 0 || activeBackground !== 'none'
@@ -161,16 +153,17 @@ const VideoChat: React.FC<VideoChatProps> = ({
       const canvasTrack = getCanvasVideoTrack()
       if (canvasTrack) replaceVideoTrack(canvasTrack)
       const canvasStream = getCanvasStream()
-      if (canvasStream && localVideoRef.current) {
-        localVideoRef.current.srcObject = canvasStream
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = canvasStream ?? localStream
       }
     } else {
       replaceVideoTrack(null)
-      if (localVideoRef.current && localStream) {
+      if (localVideoRef.current) {
         localVideoRef.current.srcObject = localStream
       }
     }
-  }, [activeCharacter, activeAccessories, activeBackground, localStream, getCanvasVideoTrack, getCanvasStream, replaceVideoTrack])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCharacter, activeAccessories, activeBackground, localStream, isConnected, getCanvasVideoTrack, getCanvasStream, replaceVideoTrack])
 
   const startSearch = useCallback(async () => {
     const stream = await initMedia()
