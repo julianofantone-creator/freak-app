@@ -20,17 +20,18 @@
     "security:audit": "npm audit --audit-level moderate",
     "deps:update": "npx npm-check-updates -u && npm install",
     "clean": "rm -rf dist node_modules/.vite",
-    "postinstall": "echo '\ud83d\udd25 Freaky dependencies installed! Run npm run dev to start.'",
+    "postinstall": "echo '🔥 Freaky dependencies installed! Run npm run dev to start.'",
     "start": "vite preview"
   },
   "dependencies": {
+    "@mediapipe/tasks-vision": "^0.10.32",
+    "framer-motion": "^10.16.16",
+    "lucide-react": "^0.294.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
-    "socket.io-client": "^4.7.4",
-    "react-router-dom": "^6.20.1",
-    "framer-motion": "^10.16.16",
     "react-hot-toast": "^2.4.1",
-    "lucide-react": "^0.294.0"
+    "react-router-dom": "^6.20.1",
+    "socket.io-client": "^4.7.4"
   },
   "devDependencies": {
     "@types/react": "^18.2.43",
