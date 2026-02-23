@@ -24,6 +24,9 @@ interface VideoChatProps {
   streamerInfo?: { streamerName: string; streamUrl: string; code: string } | null
 }
 
+// ── Feature flags ─────────────────────────────────────────────────────────────
+const DATE_MODE_ENABLED = false  // flip to true when ready to launch
+
 const VideoChat: React.FC<VideoChatProps> = ({
   user: _user,
   setConnectionState,
@@ -285,8 +288,8 @@ const VideoChat: React.FC<VideoChatProps> = ({
               <div className="absolute top-3 left-3 bg-black/50 backdrop-blur-sm px-3 py-1 rounded-full">
                 <span className="text-white text-sm font-semibold">{currentPartner.username}</span>
               </div>
-              {/* Date mode timer badge */}
-              {chatMode === 'date' && dateTimeLeft !== null && dateTimeLeft > 0 && (
+              {/* Date mode timer + badge — hidden until DATE_MODE_ENABLED */}
+              {DATE_MODE_ENABLED && chatMode === 'date' && dateTimeLeft !== null && dateTimeLeft > 0 && (
                 <motion.div
                   className={`absolute top-3 right-3 px-3 py-1.5 rounded-full flex items-center gap-1.5 font-bold text-sm ${dateTimeLeft < 30 ? 'bg-red-500 text-white' : 'bg-black/60 backdrop-blur-sm text-white border border-freak-pink/40'}`}
                   animate={dateTimeLeft < 30 ? { scale: [1, 1.05, 1] } : {}}
@@ -296,8 +299,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
                   <span>{Math.floor(dateTimeLeft / 60)}:{String(dateTimeLeft % 60).padStart(2, '0')}</span>
                 </motion.div>
               )}
-              {/* Date mode badge */}
-              {chatMode === 'date' && (
+              {DATE_MODE_ENABLED && chatMode === 'date' && (
                 <div className="absolute bottom-3 left-3 bg-freak-pink/90 px-2.5 py-1 rounded-full">
                   <span className="text-white text-xs font-bold">💕 Date Mode</span>
                 </div>
@@ -376,40 +378,43 @@ const VideoChat: React.FC<VideoChatProps> = ({
             </motion.h2>
             <p className="text-freak-muted text-base mb-8">who are you meeting today?</p>
 
-            {/* Mode picker */}
-            <div className="flex gap-3 mb-8 w-full max-w-xs">
-              <motion.button
-                onClick={() => setChatMode('random')}
-                className={`flex-1 flex flex-col items-center gap-1.5 py-4 rounded-2xl border-2 transition-colors ${chatMode === 'random' ? 'border-freak-pink bg-freak-pink/15' : 'border-freak-border bg-freak-surface'}`}
-                whileTap={{ scale: 0.96 }}
-              >
-                <span className="text-2xl">🎲</span>
-                <span className={`text-xs font-bold ${chatMode === 'random' ? 'text-freak-pink' : 'text-freak-muted'}`}>Random</span>
-              </motion.button>
-              <motion.button
-                onClick={() => setChatMode('date')}
-                className={`flex-1 flex flex-col items-center gap-1.5 py-4 rounded-2xl border-2 transition-colors ${chatMode === 'date' ? 'border-freak-pink bg-freak-pink/15' : 'border-freak-border bg-freak-surface'}`}
-                whileTap={{ scale: 0.96 }}
-              >
-                <span className="text-2xl">💕</span>
-                <span className={`text-xs font-bold ${chatMode === 'date' ? 'text-freak-pink' : 'text-freak-muted'}`}>Date Mode</span>
-              </motion.button>
-            </div>
-
-            {chatMode === 'date' && (
-              <motion.p
-                initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}
-                className="text-freak-muted text-xs text-center mb-6 max-w-xs leading-relaxed"
-              >
-                💡 3-min speed dates. Both swipe 💕 to match. Built for the eDating era.
-              </motion.p>
+            {/* Mode picker — hidden until DATE_MODE_ENABLED */}
+            {DATE_MODE_ENABLED && (
+              <>
+                <div className="flex gap-3 mb-8 w-full max-w-xs">
+                  <motion.button
+                    onClick={() => setChatMode('random')}
+                    className={`flex-1 flex flex-col items-center gap-1.5 py-4 rounded-2xl border-2 transition-colors ${chatMode === 'random' ? 'border-freak-pink bg-freak-pink/15' : 'border-freak-border bg-freak-surface'}`}
+                    whileTap={{ scale: 0.96 }}
+                  >
+                    <span className="text-2xl">🎲</span>
+                    <span className={`text-xs font-bold ${chatMode === 'random' ? 'text-freak-pink' : 'text-freak-muted'}`}>Random</span>
+                  </motion.button>
+                  <motion.button
+                    onClick={() => setChatMode('date')}
+                    className={`flex-1 flex flex-col items-center gap-1.5 py-4 rounded-2xl border-2 transition-colors ${chatMode === 'date' ? 'border-freak-pink bg-freak-pink/15' : 'border-freak-border bg-freak-surface'}`}
+                    whileTap={{ scale: 0.96 }}
+                  >
+                    <span className="text-2xl">💕</span>
+                    <span className={`text-xs font-bold ${chatMode === 'date' ? 'text-freak-pink' : 'text-freak-muted'}`}>Date Mode</span>
+                  </motion.button>
+                </div>
+                {chatMode === 'date' && (
+                  <motion.p
+                    initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}
+                    className="text-freak-muted text-xs text-center mb-6 max-w-xs leading-relaxed"
+                  >
+                    💡 3-min speed dates. Both swipe 💕 to match. Built for the eDating era.
+                  </motion.p>
+                )}
+              </>
             )}
 
             <motion.button onClick={() => startSearch(chatMode)}
               className="px-14 py-4 bg-freak-pink text-white text-xl font-bold rounded-2xl shadow-pink"
               whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }}
               initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-              {serverOffline ? 'Connecting...' : chatMode === 'date' ? '💕 Start Dating' : 'Start'}
+              {serverOffline ? 'Connecting...' : 'Start'}
             </motion.button>
 
             {/* Live online counter */}
@@ -435,7 +440,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
 
       {/* ─── DATE MODE: MUTUAL CRUSH / IT'S A MATCH ─── */}
       <AnimatePresence>
-        {mutualCrush && chatMode === 'date' && (
+        {DATE_MODE_ENABLED && mutualCrush && chatMode === 'date' && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -468,7 +473,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
 
       {/* ─── DATE MODE: TIME'S UP OVERLAY ─── */}
       <AnimatePresence>
-        {showDateEndOverlay && chatMode === 'date' && isConnected && (
+        {DATE_MODE_ENABLED && showDateEndOverlay && chatMode === 'date' && isConnected && (
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -554,7 +559,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
           {(isConnected || isSearching) && (
             <motion.button onClick={skip} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }}
               className="flex items-center justify-center gap-2 px-8 py-3 rounded-2xl border-2 border-freak-pink text-freak-pink font-bold text-base">
-              <SkipForward className="w-5 h-5" /> {chatMode === 'date' ? 'PASS' : 'SKIP'}
+              <SkipForward className="w-5 h-5" /> SKIP
             </motion.button>
           )}
 
@@ -565,14 +570,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
             </motion.button>
           )}
 
-          {isConnected && chatMode === 'date' && (
-            <motion.button onClick={addCrush} whileTap={{ scale: 0.9 }} disabled={crushedCurrentPartner}
-              className={`flex items-center gap-1.5 px-4 py-2.5 rounded-2xl font-bold text-sm ${crushedCurrentPartner ? 'bg-freak-pink/30 text-white/50' : 'bg-freak-pink shadow-pink text-white'}`}>
-              <Heart className="w-4 h-4 fill-current" />
-              {crushedCurrentPartner ? 'Liked!' : 'Like'}
-            </motion.button>
-          )}
-          {isConnected && chatMode !== 'date' && (
+          {isConnected && (
             <motion.button onClick={addCrush} whileTap={{ scale: 0.9 }} disabled={crushedCurrentPartner}
               className={`w-11 h-11 rounded-full flex items-center justify-center ${crushedCurrentPartner ? 'bg-freak-pink/30' : 'bg-freak-pink shadow-pink'}`}>
               <Heart className="w-5 h-5 text-white fill-white" />
