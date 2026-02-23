@@ -42,6 +42,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
 }) => {
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
+  const selfPreviewRef = useRef<HTMLVideoElement>(null) // filter preview when not in call
   const pendingCrushIdRef = useRef<string | null>(null) // tracks last crush we sent a msg to (for ack mapping)
 
   const [isConnected, setIsConnected] = useState(false)
@@ -180,6 +181,15 @@ const VideoChat: React.FC<VideoChatProps> = ({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCharacter, activeAccessories, activeBackground, localStream, isConnected, getCanvasVideoTrack, getCanvasStream, replaceVideoTrack])
+
+  // Self-preview: when not in a call, wire canvas (or raw) stream to the corner preview
+  useEffect(() => {
+    if (isConnected || !selfPreviewRef.current || !localStream) return
+    const hasFilter = !!activeCharacter || activeAccessories.length > 0 || activeBackground !== 'none'
+    const canvasStream = getCanvasStream()
+    selfPreviewRef.current.srcObject = (hasFilter && canvasStream) ? canvasStream : localStream
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCharacter, activeAccessories, activeBackground, localStream, isConnected, getCanvasStream])
 
   // Mutual crush detection in date mode (both liked each other → celebrate)
   useEffect(() => {
@@ -438,6 +448,30 @@ const VideoChat: React.FC<VideoChatProps> = ({
         )}
       </div>
 
+      {/* ─── SELF PREVIEW — shows in bottom-right when filter is open but not in call ─── */}
+      {localStream && !isConnected && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="absolute bottom-24 right-4 z-20 rounded-2xl overflow-hidden border-2 border-freak-pink/60 shadow-pink"
+          style={{ width: 100, height: 133 }}
+        >
+          <video
+            ref={selfPreviewRef}
+            autoPlay
+            muted
+            playsInline
+            className="w-full h-full object-cover"
+            style={{ transform: 'scaleX(-1)' }}
+          />
+          {(activeCharacter || activeAccessories.length > 0 || activeBackground !== 'none') && (
+            <div className="absolute bottom-1 left-0 right-0 flex justify-center">
+              <span className="text-xs bg-black/60 px-1.5 py-0.5 rounded-full text-freak-pink font-bold">LIVE</span>
+            </div>
+          )}
+        </motion.div>
+      )}
+
       {/* ─── DATE MODE: MUTUAL CRUSH / IT'S A MATCH ─── */}
       <AnimatePresence>
         {DATE_MODE_ENABLED && mutualCrush && chatMode === 'date' && (
@@ -582,9 +616,9 @@ const VideoChat: React.FC<VideoChatProps> = ({
             {isVideoOn ? <Video className="w-5 h-5 text-white" /> : <VideoOff className="w-5 h-5 text-white" />}
           </motion.button>
 
-          {/* Face Mask button */}
+          {/* Face Mask button — also pre-starts camera so filter preview works */}
           <motion.button
-            onClick={() => setShowCharacterPicker(true)}
+            onClick={async () => { await initMedia(); setShowCharacterPicker(true) }}
             whileTap={{ scale: 0.9 }}
             className={`w-11 h-11 rounded-full flex items-center justify-center relative ${(activeCharacter || activeAccessories.length > 0 || activeBackground !== 'none') ? 'bg-freak-pink shadow-pink' : 'bg-freak-surface border border-freak-border'}`}
             title="Face Masks"
