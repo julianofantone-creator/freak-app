@@ -784,9 +784,10 @@ export function useCharacterOverlay({ localStream }: UseCharacterOverlayOptions)
         }
 
         if (!cancelled) {
-          const bothReady = landmarkerReady.current && segmenterReady.current
-          setFilterReady(bothReady)
-          if (!bothReady) setFilterError('Some filters unavailable — try refreshing')
+          // Ready as soon as EITHER model loads — don't block UI on both
+          const anyReady = landmarkerReady.current || segmenterReady.current
+          setFilterReady(anyReady)
+          if (!landmarkerReady.current) setFilterError('Face tracking unavailable — characters will use emoji fallback')
           console.log(`[FaceFilter] face=${landmarkerReady.current} seg=${segmenterReady.current}`)
         }
       } catch (e) {
@@ -877,13 +878,17 @@ export function useCharacterOverlay({ localStream }: UseCharacterOverlayOptions)
       }
 
       // ── Character + accessories on top of video/bg ────────────────────
+      // Landmarks detection is OPTIONAL — if FaceLandmarker failed to load we
+      // still show the fallback tint + emoji so the user knows the filter is ON.
       const hasFilter = !!char || accs.length > 0
-      if (hasFilter && landmarkerReady.current && landmarkerRef.current) {
+      if (hasFilter) {
         let landmarks: NormalizedLandmark[] | null = null
-        try {
-          const result = landmarkerRef.current.detectForVideo(vid, t)
-          landmarks = result.faceLandmarks[0] ?? null
-        } catch (_) {}
+        if (landmarkerReady.current && landmarkerRef.current) {
+          try {
+            const result = landmarkerRef.current.detectForVideo(vid, t)
+            landmarks = result.faceLandmarks[0] ?? null
+          } catch (_) {}
+        }
 
         if (landmarks) {
           // ── Compute head pose ─────────────────────────────────────────
