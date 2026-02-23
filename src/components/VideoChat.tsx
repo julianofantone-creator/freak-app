@@ -375,17 +375,77 @@ const VideoChat: React.FC<VideoChatProps> = ({
           </div>
         ) : (
           /* ─── IDLE ─── */
-          <div className="flex-1 flex flex-col items-center justify-center px-6">
-            <motion.h2 className="text-freak-pink text-5xl font-black mb-2 tracking-tighter"
-              initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-              freaky
-            </motion.h2>
-            <p className="text-freak-muted text-base mb-8">who are you meeting today?</p>
+          <div className="flex-1 flex flex-col items-center justify-center px-5 gap-5">
+
+            {/* ── Camera preview pane ── */}
+            {localStream ? (
+              /* Camera is on — show live canvas preview */
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="w-full max-w-sm rounded-2xl overflow-hidden border-2 border-freak-pink/50 relative bg-black shadow-pink flex-shrink-0"
+                style={{ aspectRatio: '4/3' }}
+              >
+                <canvas
+                  ref={previewCanvasRef}
+                  width={640} height={480}
+                  style={{ width: '100%', height: '100%', display: 'block' }}
+                />
+                {/* Filter button — bottom-right corner of preview */}
+                <motion.button
+                  onClick={async () => { await initMedia(); setShowCharacterPicker(true) }}
+                  whileTap={{ scale: 0.88 }}
+                  className={`absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold shadow-lg ${
+                    (activeCharacter || activeAccessories.length > 0 || activeBackground !== 'none')
+                      ? 'bg-freak-pink text-white'
+                      : 'bg-black/60 backdrop-blur-sm text-white border border-white/20'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5" />
+                  {activeCharacter ? activeCharacter.label : 'Filters'}
+                </motion.button>
+                {/* Loading dot */}
+                {!filterReady && (
+                  <div className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-yellow-400 animate-pulse" title="Loading face filters…" />
+                )}
+                {/* Your name badge */}
+                <div className="absolute top-2.5 left-2.5 bg-black/50 backdrop-blur-sm px-2.5 py-1 rounded-full">
+                  <span className="text-white text-xs font-semibold">you</span>
+                </div>
+              </motion.div>
+            ) : (
+              /* No camera yet — placeholder */
+              <motion.button
+                onClick={() => initMedia()}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                whileTap={{ scale: 0.96 }}
+                className="w-full max-w-sm rounded-2xl border-2 border-dashed border-freak-border bg-freak-surface flex flex-col items-center justify-center gap-3 flex-shrink-0 hover:border-freak-pink/50 transition-colors"
+                style={{ aspectRatio: '4/3' }}
+              >
+                <div className="w-14 h-14 rounded-full bg-freak-border flex items-center justify-center">
+                  <Video className="w-6 h-6 text-freak-muted" />
+                </div>
+                <div className="text-center">
+                  <p className="text-white font-semibold text-sm">Preview Camera</p>
+                  <p className="text-freak-muted text-xs mt-0.5">See yourself before you connect</p>
+                </div>
+              </motion.button>
+            )}
+
+            {/* ── Logo + subtitle ── */}
+            <div className="text-center">
+              <motion.h2 className="text-freak-pink text-4xl font-black tracking-tighter"
+                initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
+                freaky
+              </motion.h2>
+              <p className="text-freak-muted text-sm mt-0.5">who are you meeting today?</p>
+            </div>
 
             {/* Mode picker — hidden until DATE_MODE_ENABLED */}
             {DATE_MODE_ENABLED && (
               <>
-                <div className="flex gap-3 mb-8 w-full max-w-xs">
+                <div className="flex gap-3 w-full max-w-xs">
                   <motion.button
                     onClick={() => setChatMode('random')}
                     className={`flex-1 flex flex-col items-center gap-1.5 py-4 rounded-2xl border-2 transition-colors ${chatMode === 'random' ? 'border-freak-pink bg-freak-pink/15' : 'border-freak-border bg-freak-surface'}`}
@@ -406,7 +466,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
                 {chatMode === 'date' && (
                   <motion.p
                     initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }}
-                    className="text-freak-muted text-xs text-center mb-6 max-w-xs leading-relaxed"
+                    className="text-freak-muted text-xs text-center max-w-xs leading-relaxed"
                   >
                     💡 3-min speed dates. Both swipe 💕 to match. Built for the eDating era.
                   </motion.p>
@@ -414,10 +474,11 @@ const VideoChat: React.FC<VideoChatProps> = ({
               </>
             )}
 
+            {/* Start button */}
             <motion.button onClick={() => startSearch(chatMode)}
               className="px-14 py-4 bg-freak-pink text-white text-xl font-bold rounded-2xl shadow-pink"
               whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.97 }}
-              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
               {serverOffline ? 'Connecting...' : 'Start'}
             </motion.button>
 
@@ -427,7 +488,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ delay: 0.3 }}
-                className="mt-6 flex items-center gap-2 text-freak-muted text-sm"
+                className="flex items-center gap-2 text-freak-muted text-sm"
               >
                 <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse inline-block" />
                 <span>
@@ -442,35 +503,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
         )}
       </div>
 
-      {/* ─── SELF PREVIEW — live canvas blit from filter hook ─── */}
-      {/* Canvas element lives permanently in DOM; hook blits every frame into it */}
-      {localStream && !isConnected && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.8 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="absolute bottom-24 right-4 z-20 rounded-2xl overflow-hidden border-2 border-freak-pink/60 shadow-pink"
-          style={{ width: 160, height: 90 }}
-        >
-          {/* width/height = internal resolution; CSS sizes the display */}
-          <canvas ref={previewCanvasRef} width={320} height={180} style={{ width: '100%', height: '100%', display: 'block' }} />
-          {!filterReady && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/70">
-              <div className="flex flex-col items-center gap-1">
-                <svg className="animate-spin w-4 h-4 text-freak-pink" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                </svg>
-                <span className="text-white text-[10px]">Loading filters…</span>
-              </div>
-            </div>
-          )}
-          {filterReady && (activeCharacter || activeAccessories.length > 0 || activeBackground !== 'none') && (
-            <div className="absolute bottom-1 left-0 right-0 flex justify-center">
-              <span className="text-[10px] bg-freak-pink px-1.5 py-0.5 rounded-full text-white font-bold">LIVE</span>
-            </div>
-          )}
-        </motion.div>
-      )}
+      {/* (self preview is now embedded in the idle screen — no floating overlay needed) */}
 
       {/* ─── DATE MODE: MUTUAL CRUSH / IT'S A MATCH ─── */}
       <AnimatePresence>
