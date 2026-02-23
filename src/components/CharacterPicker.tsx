@@ -3,27 +3,32 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { X, Sparkles, Layers } from 'lucide-react'
 import {
   Character, CHARACTERS,
-  Accessory, ACCESSORIES, ACCESSORY_CATEGORIES, AccessoryCategory
+  Accessory, ACCESSORIES, ACCESSORY_CATEGORIES, AccessoryCategory,
+  Background, BACKGROUNDS,
 } from '../hooks/useCharacterOverlay'
 
 interface CharacterPickerProps {
   activeCharacter: Character | null
   activeAccessories: string[]
+  activeBackground: string
   onSelect: (char: Character | null) => void
   onToggleAccessory: (id: string) => void
   onClearAccessories: () => void
+  onSelectBackground: (id: string) => void
   onClose: () => void
 }
 
 export default function CharacterPicker({
   activeCharacter,
   activeAccessories,
+  activeBackground,
   onSelect,
   onToggleAccessory,
   onClearAccessories,
+  onSelectBackground,
   onClose,
 }: CharacterPickerProps) {
-  const [tab, setTab] = useState<'characters' | 'accessories'>('characters')
+  const [tab, setTab] = useState<'characters' | 'accessories' | 'backgrounds'>('characters')
   const [accCat, setAccCat] = useState<AccessoryCategory>('head')
 
   const filteredAccessories = ACCESSORIES.filter(a => a.category === accCat)
@@ -55,8 +60,9 @@ export default function CharacterPicker({
           {/* Tabs */}
           <div className="flex gap-1 mb-0">
             {[
-              { id: 'characters' as const, label: '🎭 Characters' },
-              { id: 'accessories' as const, label: `🪖 Accessories${activeAccessories.length > 0 ? ` (${activeAccessories.length})` : ''}` },
+              { id: 'characters'  as const, label: '🎭 Characters' },
+              { id: 'accessories' as const, label: `🪖 Fits${activeAccessories.length > 0 ? ` (${activeAccessories.length})` : ''}` },
+              { id: 'backgrounds' as const, label: `🌆 Backgrounds${activeBackground !== 'none' ? ' ●' : ''}` },
             ].map(t => (
               <button
                 key={t.id}
@@ -226,6 +232,49 @@ export default function CharacterPicker({
                 <Layers size={16} className="text-freak-pink shrink-0 mt-0.5" />
                 <p className="text-freak-muted text-xs leading-relaxed">
                   Stack multiple accessories. Halo helmet + sunglasses + chain all at once. The more chaotic the combo, the better the clip.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ── Backgrounds tab ────────────────────────────────────────────── */}
+          {tab === 'backgrounds' && (
+            <div className="space-y-4">
+              <div>
+                <p className="text-freak-muted text-xs uppercase tracking-wider mb-1">Virtual Backgrounds</p>
+                <p className="text-freak-muted text-[11px] mb-3">Replace your background. Works with or without a character.</p>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2.5">
+                {(BACKGROUNDS as Background[]).map((bg) => {
+                  const isActive = activeBackground === bg.id
+                  return (
+                    <motion.button
+                      key={bg.id}
+                      onClick={() => { onSelectBackground(bg.id); onClose() }}
+                      className={`flex flex-col items-center gap-2 p-3 rounded-2xl border transition-colors ${
+                        isActive
+                          ? 'border-freak-pink bg-freak-pink/15'
+                          : 'border-freak-border bg-freak-surface hover:border-freak-pink/40'
+                      }`}
+                      whileHover={{ scale: 1.04 }}
+                      whileTap={{ scale: 0.92 }}
+                    >
+                      <span className="text-3xl">{bg.emoji}</span>
+                      <span className={`text-[10px] font-semibold ${isActive ? 'text-freak-pink' : 'text-freak-muted'}`}>
+                        {bg.label}
+                      </span>
+                      {isActive && <div className="w-1.5 h-1.5 rounded-full bg-freak-pink" />}
+                    </motion.button>
+                  )
+                })}
+              </div>
+
+              <div className="bg-freak-surface border border-freak-border rounded-2xl p-4">
+                <p className="text-white text-xs font-medium mb-1">🔥 Pro combo</p>
+                <p className="text-freak-muted text-xs leading-relaxed">
+                  Peanut character + Space background = you're an actual peanut floating in space. That clip goes viral.{' '}
+                  <span className="text-freak-pink">Stack everything.</span>
                 </p>
               </div>
             </div>

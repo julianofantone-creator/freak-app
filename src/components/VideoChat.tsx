@@ -59,6 +59,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
   const {
     activeCharacter, selectCharacter,
     activeAccessories, toggleAccessory, clearAccessories,
+    activeBackground, selectBackground,
     getCanvasVideoTrack, getCanvasStream
   } = useCharacterOverlay({
     localStream,
@@ -155,7 +156,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
   // Swap WebRTC track to canvas when character OR accessories are active
   useEffect(() => {
     if (!localStream) return
-    const hasFilter = !!activeCharacter || activeAccessories.length > 0
+    const hasFilter = !!activeCharacter || activeAccessories.length > 0 || activeBackground !== 'none'
     if (hasFilter) {
       const canvasTrack = getCanvasVideoTrack()
       if (canvasTrack) replaceVideoTrack(canvasTrack)
@@ -169,7 +170,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
         localVideoRef.current.srcObject = localStream
       }
     }
-  }, [activeCharacter, activeAccessories, localStream, getCanvasVideoTrack, getCanvasStream, replaceVideoTrack])
+  }, [activeCharacter, activeAccessories, activeBackground, localStream, getCanvasVideoTrack, getCanvasStream, replaceVideoTrack])
 
   const startSearch = useCallback(async () => {
     const stream = await initMedia()
@@ -432,7 +433,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
           <motion.button
             onClick={() => setShowCharacterPicker(true)}
             whileTap={{ scale: 0.9 }}
-            className={`w-11 h-11 rounded-full flex items-center justify-center relative ${(activeCharacter || activeAccessories.length > 0) ? 'bg-freak-pink shadow-pink' : 'bg-freak-surface border border-freak-border'}`}
+            className={`w-11 h-11 rounded-full flex items-center justify-center relative ${(activeCharacter || activeAccessories.length > 0 || activeBackground !== 'none') ? 'bg-freak-pink shadow-pink' : 'bg-freak-surface border border-freak-border'}`}
             title="Face Masks"
           >
             <Sparkles className="w-5 h-5 text-white" />
@@ -479,9 +480,11 @@ const VideoChat: React.FC<VideoChatProps> = ({
           <CharacterPicker
             activeCharacter={activeCharacter}
             activeAccessories={activeAccessories}
+            activeBackground={activeBackground}
             onSelect={selectCharacter}
             onToggleAccessory={toggleAccessory}
             onClearAccessories={clearAccessories}
+            onSelectBackground={selectBackground}
             onClose={() => setShowCharacterPicker(false)}
           />
         )}
