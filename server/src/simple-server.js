@@ -202,18 +202,18 @@ io.use((socket, next) => {
 })
 
 // ─── Matching helpers ───────────────────────────────────────────────────────
-function tryMatch(socket) {
+function tryMatch(socket, mode = 'random') {
   // Remove self from queue if already there
   const idx = waitingQueue.findIndex(w => w.socketId === socket.id)
   if (idx !== -1) waitingQueue.splice(idx, 1)
 
-  // Find a waiting partner (not self)
-  const partnerIdx = waitingQueue.findIndex(w => w.socketId !== socket.id)
+  // Find a waiting partner with the SAME mode (random↔random, date↔date)
+  const partnerIdx = waitingQueue.findIndex(w => w.socketId !== socket.id && w.mode === mode)
   if (partnerIdx === -1) {
-    // No one waiting — add to queue
-    waitingQueue.push({ socketId: socket.id, username: socket.user.username, socket })
-    socket.emit('queue-joined', { position: waitingQueue.length })
-    console.log(`📋 Queue: ${socket.user.username} waiting (${waitingQueue.length} total)`)
+    // No one waiting in this mode — add to queue
+    waitingQueue.push({ socketId: socket.id, username: socket.user.username, socket, mode })
+    socket.emit('queue-joined', { position: waitingQueue.filter(w => w.mode === mode).length })
+    console.log(`📋 Queue [${mode}]: ${socket.user.username} waiting (${waitingQueue.length} total)`)
     return
   }
 
@@ -222,16 +222,18 @@ function tryMatch(socket) {
   activePairs.set(socket.id, partner.socketId)
   activePairs.set(partner.socketId, socket.id)
 
-  console.log(`🤝 Matched: ${socket.user.username} ↔ ${partner.username}`)
+  console.log(`🤝 Matched [${mode}]: ${socket.user.username} ↔ ${partner.username}`)
 
-  // Tell both — initiator creates the WebRTC offer
+  // Tell both — initiator creates the WebRTC offer; include mode so frontend knows
   socket.emit('match-found', {
     partner: { id: partner.socketId, username: partner.username },
     isInitiator: false,
+    mode,
   })
   partner.socket.emit('match-found', {
     partner: { id: socket.id, username: socket.user.username },
     isInitiator: true,
+    mode,
   })
 }
 
@@ -276,10 +278,11 @@ io.on('connection', (socket) => {
     pendingCrushMessages.delete(username)
   }
 
-  // User wants to find a match
-  socket.on('join-queue', () => {
-    console.log(`🔍 ${username} joining queue`)
-    tryMatch(socket)
+  // User wants to find a match (mode: 'random' | 'date')
+  socket.on('join-queue', ({ mode } = {}) => {
+    const queueMode = mode === 'date' ? 'date' : 'random'
+    console.log(`🔍 ${username} joining queue [${queueMode}]`)
+    tryMatch(socket, queueMode)
   })
 
   // User leaves queue / session

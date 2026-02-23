@@ -12,7 +12,7 @@ interface UseFreakSocketOptions {
   username: string
   localStream: MediaStream | null
   remoteVideoRef: React.RefObject<HTMLVideoElement>
-  onConnected: (partner: Partner) => void
+  onConnected: (partner: Partner, mode: 'random' | 'date') => void
   onDisconnected: () => void
   onSearching: () => void
   onCrushRequest: (fromUsername: string) => void
@@ -48,6 +48,7 @@ export function useFreakSocket({
   const [serverOffline, setServerOffline] = useState(false)
   const [liveStats, setLiveStats] = useState<{ online: number; inCalls: number; searching: number } | null>(null)
   const pendingJoin = useRef(false)
+  const pendingMode = useRef<'random' | 'date'>('random')
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Keep a ref to localStream so socket handlers always have the latest value
@@ -170,7 +171,7 @@ export function useFreakSocket({
         if (pendingJoin.current) {
           pendingJoin.current = false
           onSearchingRef.current()
-          socket.emit('join-queue', { username })
+          socket.emit('join-queue', { username, mode: pendingMode.current })
         }
       })
 
@@ -184,9 +185,10 @@ export function useFreakSocket({
       })
 
       // ── MATCH FOUND ──────────────────────────────────────────────
-      socket.on('match-found', async (data: { partner: Partner; isInitiator: boolean }) => {
-        console.log('🤝 Matched with:', data.partner.username, '| initiator:', data.isInitiator)
-        onConnectedRef.current(data.partner)
+      socket.on('match-found', async (data: { partner: Partner; isInitiator: boolean; mode?: string }) => {
+        const matchMode = (data.mode === 'date' ? 'date' : 'random') as 'random' | 'date'
+        console.log('🤝 Matched with:', data.partner.username, '| initiator:', data.isInitiator, '| mode:', matchMode)
+        onConnectedRef.current(data.partner, matchMode)
 
         const pc = createPC()
 
@@ -288,14 +290,15 @@ export function useFreakSocket({
     }
   }, [username])
 
-  const joinQueue = useCallback(() => {
+  const joinQueue = useCallback((mode: 'random' | 'date' = 'random') => {
     onSearchingRef.current()
+    pendingMode.current = mode
     if (!socketRef.current?.connected || !isReady) {
       pendingJoin.current = true
       return
     }
     pendingJoin.current = false
-    socketRef.current.emit('join-queue', { username })
+    socketRef.current.emit('join-queue', { username, mode })
   }, [isReady, username])
 
   const leaveQueue = useCallback(() => {
