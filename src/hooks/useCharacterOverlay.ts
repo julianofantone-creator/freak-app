@@ -730,7 +730,7 @@ export function useCharacterOverlay({ localStream }: UseCharacterOverlayOptions)
         },
         runningMode: 'VIDEO', numFaces: 1,
         outputFaceBlendshapes: false,
-        minFaceDetectionConfidence: 0.5, minFacePresenceScore: 0.5, minTrackingConfidence: 0.5,
+        minFaceDetectionConfidence: 0.3, minFacePresenceScore: 0.3, minTrackingConfidence: 0.3,
       })
     }
 
@@ -751,31 +751,43 @@ export function useCharacterOverlay({ localStream }: UseCharacterOverlayOptions)
         const vision = await FilesetResolver.forVisionTasks(
           'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
         )
+        console.log('[FaceFilter] WASM loaded')
 
-        // Try GPU first, fall back to CPU if GPU delegate fails
-        let fl: FaceLandmarker
+        // Load FaceLandmarker — GPU first, CPU fallback
         try {
-          fl = await tryCreateFaceLandmarker(vision, 'GPU')
-          console.log('[FaceFilter] FaceLandmarker loaded (GPU)')
+          const fl = await tryCreateFaceLandmarker(vision, 'GPU')
+          if (!cancelled) { landmarkerRef.current = fl; landmarkerReady.current = true }
+          console.log('[FaceFilter] FaceLandmarker ✅ GPU')
         } catch {
-          console.warn('[FaceFilter] GPU delegate failed, falling back to CPU')
-          fl = await tryCreateFaceLandmarker(vision, 'CPU')
-          console.log('[FaceFilter] FaceLandmarker loaded (CPU)')
+          try {
+            const fl = await tryCreateFaceLandmarker(vision, 'CPU')
+            if (!cancelled) { landmarkerRef.current = fl; landmarkerReady.current = true }
+            console.log('[FaceFilter] FaceLandmarker ✅ CPU')
+          } catch (e) {
+            console.error('[FaceFilter] FaceLandmarker ❌ both delegates failed', e)
+          }
         }
 
-        let seg: ImageSegmenter
+        // Load Segmenter — GPU first, CPU fallback
         try {
-          seg = await tryCreateSegmenter(vision, 'GPU')
+          const seg = await tryCreateSegmenter(vision, 'GPU')
+          if (!cancelled) { segmenterRef.current = seg; segmenterReady.current = true }
+          console.log('[FaceFilter] Segmenter ✅ GPU')
         } catch {
-          seg = await tryCreateSegmenter(vision, 'CPU')
+          try {
+            const seg = await tryCreateSegmenter(vision, 'CPU')
+            if (!cancelled) { segmenterRef.current = seg; segmenterReady.current = true }
+            console.log('[FaceFilter] Segmenter ✅ CPU')
+          } catch (e) {
+            console.error('[FaceFilter] Segmenter ❌ both delegates failed', e)
+          }
         }
 
         if (!cancelled) {
-          landmarkerRef.current  = fl;  landmarkerReady.current  = true
-          segmenterRef.current   = seg; segmenterReady.current   = true
-          setFilterReady(true)
-          setFilterError(null)
-          console.log('[FaceFilter] ✅ Ready')
+          const bothReady = landmarkerReady.current && segmenterReady.current
+          setFilterReady(bothReady)
+          if (!bothReady) setFilterError('Some filters unavailable — try refreshing')
+          console.log(`[FaceFilter] face=${landmarkerReady.current} seg=${segmenterReady.current}`)
         }
       } catch (e) {
         console.error('[FaceFilter] ❌ Init failed completely', e)
@@ -1019,10 +1031,33 @@ export function useCharacterOverlay({ localStream }: UseCharacterOverlayOptions)
             drawAccessories(ctx, accs, landmarks, W, H)
             ctx.restore()
           }
-        } else {
-          ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.font = '15px sans-serif'
+        } else if (char) {
+          // ── Fallback: face not detected yet — show character overlay anyway ────
+          // This gives immediate visual feedback even before face is tracked.
+          // User sees the character filter is ON; they just need to center their face.
+
+          // Full-frame skin tint so it's OBVIOUS the filter is active
+          ctx.fillStyle = char.skin.replace(/[\d.]+\)$/, '0.35)')
+          ctx.fillRect(0, 0, W, H)
+
+          // Giant character emoji at face-height estimate (upper third)
+          ctx.font = `${H * 0.28}px serif`
           ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
-          ctx.fillText('Move into frame', W/2, H*0.92)
+          ctx.fillText(char.emoji, W / 2, H * 0.35)
+
+          // Character name badge
+          const label = char.label.toUpperCase()
+          ctx.font = `bold ${H * 0.038}px sans-serif`
+          const tw = ctx.measureText(label).width
+          const bx = W/2 - tw/2 - 16, by = H * 0.62 - 14, bw = tw + 32, bh = 36
+          ctx.fillStyle = 'rgba(0,0,0,0.55)'
+          ctx.beginPath(); if (ctx.roundRect) ctx.roundRect(bx, by, bw, bh, 10); else ctx.rect(bx, by, bw, bh)
+          ctx.fill()
+          ctx.fillStyle = '#fff'; ctx.fillText(label, W/2, H * 0.62 + 4)
+
+          // Hint text
+          ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.font = `${H * 0.026}px sans-serif`
+          ctx.fillText(!landmarkerReady.current ? 'Loading face tracking…' : 'Center your face in frame', W/2, H * 0.74)
         }
       }
 
