@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Heart } from 'lucide-react'
+import { X, Heart, MoreVertical, Trash2, Ban, Flag } from 'lucide-react'
 import { Crush, ChatMessage } from '../types'
 import CrushChat from './CrushChat'
 
@@ -22,14 +22,19 @@ interface CrushesPanelProps {
   messages: Record<string, ChatMessage[]>
   onSendMessage: (crushId: string, msg: Omit<ChatMessage, 'id' | 'timestamp'>) => void
   onUpdateCrushEmoji: (crushId: string, emoji: string) => void
+  onDeleteCrush?: (crushId: string) => void
+  onBlockUser?: (username: string) => void
   onClose: () => void
   crushStatuses?: Record<string, 'sent' | 'delivered' | 'queued' | 'read'>
   onSendReadReceipt?: (username: string) => void
 }
 
-const CrushesPanel: React.FC<CrushesPanelProps> = ({ crushes, messages, onSendMessage, onUpdateCrushEmoji, onClose, crushStatuses = {}, onSendReadReceipt }) => {
+const SERVER_URL = (import.meta as any).env?.VITE_API_URL || 'https://freak-app-production.up.railway.app'
+
+const CrushesPanel: React.FC<CrushesPanelProps> = ({ crushes, messages, onSendMessage, onUpdateCrushEmoji, onDeleteCrush, onBlockUser, onClose, crushStatuses = {}, onSendReadReceipt }) => {
   const [activeCrush, setActiveCrush] = useState<Crush | null>(null)
   const [emojiPickerFor, setEmojiPickerFor] = useState<string | null>(null)
+  const [menuFor, setMenuFor] = useState<string | null>(null) // crush id with open menu
 
   const openChat = (crush: Crush) => {
     setActiveCrush(crush)
@@ -125,8 +130,8 @@ const CrushesPanel: React.FC<CrushesPanelProps> = ({ crushes, messages, onSendMe
                     const lastMsg = convo[convo.length - 1]
 
                     return (
+                      <div key={crush.id} className="relative">
                       <motion.button
-                        key={crush.id}
                         onClick={() => openChat(crush)}
                         className="w-full flex items-center gap-4 px-5 py-4 hover:bg-freak-surface transition-colors text-left"
                         whileTap={{ scale: 0.98 }}
@@ -165,13 +170,66 @@ const CrushesPanel: React.FC<CrushesPanelProps> = ({ crushes, messages, onSendMe
                           </p>
                         </div>
 
-                        {/* Unread badge */}
-                        {crush.unread > 0 && (
-                          <div className="flex-shrink-0 w-5 h-5 bg-freak-pink rounded-full flex items-center justify-center">
-                            <span className="text-white text-[10px] font-bold">{crush.unread}</span>
-                          </div>
-                        )}
+                        {/* Unread badge or more menu */}
+                        <div className="flex-shrink-0 flex items-center gap-1">
+                          {crush.unread > 0 && (
+                            <div className="w-5 h-5 bg-freak-pink rounded-full flex items-center justify-center">
+                              <span className="text-white text-[10px] font-bold">{crush.unread}</span>
+                            </div>
+                          )}
+                          <motion.button
+                            onClick={(e) => { e.stopPropagation(); setMenuFor(menuFor === crush.id ? null : crush.id) }}
+                            whileTap={{ scale: 0.85 }}
+                            className="w-7 h-7 flex items-center justify-center rounded-full text-freak-muted hover:text-white hover:bg-freak-surface transition-colors"
+                          >
+                            <MoreVertical size={15} />
+                          </motion.button>
+                        </div>
                       </motion.button>
+
+                      {/* Dropdown menu */}
+                      <AnimatePresence>
+                        {menuFor === crush.id && (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.9, y: -8 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.9, y: -8 }}
+                            className="absolute right-4 z-50 bg-freak-surface border border-freak-border rounded-2xl shadow-2xl overflow-hidden min-w-[160px]"
+                            style={{ top: '100%', marginTop: '-40px' }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              onClick={() => { onDeleteCrush?.(crush.id); setMenuFor(null) }}
+                              className="w-full flex items-center gap-3 px-4 py-3 text-freak-muted hover:bg-freak-border hover:text-white transition-colors text-sm"
+                            >
+                              <Trash2 size={14} /> Delete chat
+                            </button>
+                            <button
+                              onClick={() => { onBlockUser?.(crush.username); onDeleteCrush?.(crush.id); setMenuFor(null) }}
+                              className="w-full flex items-center gap-3 px-4 py-3 text-red-400 hover:bg-red-500/10 transition-colors text-sm"
+                            >
+                              <Ban size={14} /> Block user
+                            </button>
+                            <button
+                              onClick={async () => {
+                                setMenuFor(null)
+                                try {
+                                  await fetch(`${SERVER_URL}/api/report`, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ category: 'user', description: `Reported user: ${crush.username}`, meta: { username: crush.username } }),
+                                  })
+                                } catch {}
+                                alert('Thanks — report sent. We review all reports.')
+                              }}
+                              className="w-full flex items-center gap-3 px-4 py-3 text-freak-muted hover:bg-freak-border hover:text-white transition-colors text-sm border-t border-freak-border"
+                            >
+                              <Flag size={14} /> Report
+                            </button>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                      </div>
                     )
                   })}
                 </div>

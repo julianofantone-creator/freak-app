@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Heart, SkipForward, Square, Video, VideoOff, Mic, MicOff, Zap } from 'lucide-react'
+import { Heart, SkipForward, Square, Video, VideoOff, Mic, MicOff, Zap, Sparkles } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { User, ConnectionState, Crush, ChatMessage } from '../types'
 import CrushesPanel from './CrushesPanel'
 import StreamOverlay from './StreamOverlay'
+import CharacterPicker from './CharacterPicker'
 import { useFreakSocket } from '../hooks/useFreakSocket'
+import { useCharacterOverlay } from '../hooks/useCharacterOverlay'
 
 interface VideoChatProps {
   user: User
@@ -16,6 +18,8 @@ interface VideoChatProps {
   onAddCrush: (crush: Crush) => void
   onSendCrushMessage: (crushId: string, msg: Omit<ChatMessage, 'id' | 'timestamp'>) => void
   onUpdateCrushEmoji: (crushId: string, emoji: string) => void
+  onDeleteCrush?: (crushId: string) => void
+  onBlockUser?: (username: string) => void
   premium?: { isPremium: boolean; streamerName?: string; daysLeft?: number }
   streamerInfo?: { streamerName: string; streamUrl: string; code: string } | null
 }
@@ -28,6 +32,8 @@ const VideoChat: React.FC<VideoChatProps> = ({
   onAddCrush,
   onSendCrushMessage,
   onUpdateCrushEmoji,
+  onDeleteCrush,
+  onBlockUser,
   premium,
   streamerInfo,
 }) => {
@@ -46,7 +52,35 @@ const VideoChat: React.FC<VideoChatProps> = ({
   const [incomingCrush, setIncomingCrush] = useState<{ username: string } | null>(null)
   // Per-crush delivery/read status: crushId → status (for the last sent message)
   const [crushStatuses, setCrushStatuses] = useState<Record<string, 'sent' | 'delivered' | 'queued' | 'read'>>({})
-  const [showStream, setShowStream] = useState(true) // stream overlay visible by default for Freaky+ users
+  const [showStream, setShowStream] = useState(true)
+  const [showCharacterPicker, setShowCharacterPicker] = useState(false)
+
+  // ── Character overlay ──────────────────────────────────────────────────────
+  const { activeCharacter, selectCharacter, getCanvasVideoTrack, getCanvasStream } = useCharacterOverlay({
+    localStream,
+    videoRef: localVideoRef,
+  })
+
+  // When character changes: replace WebRTC track + swap local video preview to canvas
+  useEffect(() => {
+    if (!localStream) return
+    if (activeCharacter) {
+      const canvasTrack = getCanvasVideoTrack()
+      if (canvasTrack) replaceVideoTrack(canvasTrack)
+      // Show canvas stream in local video element
+      const canvasStream = getCanvasStream()
+      if (canvasStream && localVideoRef.current) {
+        localVideoRef.current.srcObject = canvasStream
+      }
+    } else {
+      // Restore camera track
+      replaceVideoTrack(null)
+      if (localVideoRef.current && localStream) {
+        localVideoRef.current.srcObject = localStream
+      }
+    }
+  }, [activeCharacter, localStream, getCanvasVideoTrack, getCanvasStream, replaceVideoTrack])
+
   // Map username → crushId for fast lookup
   const usernameToCrushId = useCallback((uname: string) => crushes.find(c => c.username === uname)?.id, [crushes])
 
@@ -79,7 +113,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
     return () => { localStream?.getTracks().forEach(t => t.stop()) }
   }, [localStream])
 
-  const { joinQueue, skip, stop, serverOffline, liveStats, sendCrushRequest, acceptCrushRequest, sendDirectCrushMessage, sendReadReceipt } = useFreakSocket({
+  const { joinQueue, skip, stop, serverOffline, liveStats, sendCrushRequest, acceptCrushRequest, sendDirectCrushMessage, sendReadReceipt, replaceVideoTrack } = useFreakSocket({
     username: _user.username,
     localStream,
     remoteVideoRef,
@@ -388,6 +422,19 @@ const VideoChat: React.FC<VideoChatProps> = ({
             className={`w-11 h-11 rounded-full flex items-center justify-center ${isVideoOn ? 'bg-freak-surface border border-freak-border' : 'bg-red-500'}`}>
             {isVideoOn ? <Video className="w-5 h-5 text-white" /> : <VideoOff className="w-5 h-5 text-white" />}
           </motion.button>
+
+          {/* Face Mask button */}
+          <motion.button
+            onClick={() => setShowCharacterPicker(true)}
+            whileTap={{ scale: 0.9 }}
+            className={`w-11 h-11 rounded-full flex items-center justify-center relative ${activeCharacter ? 'bg-freak-pink shadow-pink' : 'bg-freak-surface border border-freak-border'}`}
+            title="Face Masks"
+          >
+            <Sparkles className="w-5 h-5 text-white" />
+            {activeCharacter && (
+              <span className="absolute -top-1 -right-1 text-sm">{activeCharacter.emoji}</span>
+            )}
+          </motion.button>
         </div>
       </div>
 
@@ -408,9 +455,22 @@ const VideoChat: React.FC<VideoChatProps> = ({
           <CrushesPanel crushes={crushes} messages={crushMessages}
             onSendMessage={handleSendCrushMessage}
             onUpdateCrushEmoji={onUpdateCrushEmoji}
+            onDeleteCrush={onDeleteCrush}
+            onBlockUser={onBlockUser}
             onClose={() => setShowCrushes(false)}
             crushStatuses={crushStatuses}
             onSendReadReceipt={sendReadReceipt} />
+        )}
+      </AnimatePresence>
+
+      {/* ─── CHARACTER / FACE MASK PICKER ─── */}
+      <AnimatePresence>
+        {showCharacterPicker && (
+          <CharacterPicker
+            activeCharacter={activeCharacter}
+            onSelect={selectCharacter}
+            onClose={() => setShowCharacterPicker(false)}
+          />
         )}
       </AnimatePresence>
 

@@ -343,5 +343,20 @@ export function useFreakSocket({
     socketRef.current?.emit('message-read', { toUsername })
   }, [])
 
-  return { joinQueue, skip, stop, isReady, serverOffline, liveStats, sendCrushRequest, acceptCrushRequest, sendChatMessage, sendDirectCrushMessage, sendReadReceipt }
+  // Replace the video track being sent to the peer (for character overlays)
+  const replaceVideoTrack = useCallback((newTrack: MediaStreamTrack | null) => {
+    const pc = pcRef.current
+    if (!pc) return
+    const sender = pc.getSenders().find(s => s.track?.kind === 'video')
+    if (!sender) return
+    if (newTrack) {
+      sender.replaceTrack(newTrack).catch(e => console.warn('replaceTrack failed:', e))
+    } else {
+      // Restore original camera track
+      const camTrack = localStreamRef.current?.getVideoTracks()[0]
+      if (camTrack) sender.replaceTrack(camTrack).catch(e => console.warn('replaceTrack restore failed:', e))
+    }
+  }, [])
+
+  return { joinQueue, skip, stop, isReady, serverOffline, liveStats, sendCrushRequest, acceptCrushRequest, sendChatMessage, sendDirectCrushMessage, sendReadReceipt, replaceVideoTrack }
 }

@@ -184,6 +184,30 @@ function App() {
     })
   }, [])
 
+  const handleDeleteCrush = useCallback((crushId: string) => {
+    setCrushes((prev) => {
+      const next = prev.filter(c => c.id !== crushId)
+      localStorage.setItem('freak_crushes', JSON.stringify(next))
+      return next
+    })
+    setCrushMessages((prev) => {
+      const next = { ...prev }
+      delete next[crushId]
+      localStorage.setItem('freak_crush_messages', JSON.stringify(next))
+      return next
+    })
+  }, [])
+
+  const handleBlockUser = useCallback((username: string) => {
+    try {
+      const blocked: string[] = JSON.parse(localStorage.getItem('freak_blocked') || '[]')
+      if (!blocked.includes(username)) {
+        blocked.push(username)
+        localStorage.setItem('freak_blocked', JSON.stringify(blocked))
+      }
+    } catch {}
+  }, [])
+
   const handleSendCrushMessage = useCallback(
     (crushId: string, msg: Omit<ChatMessage, 'id' | 'timestamp'>) => {
       const full: ChatMessage = {
@@ -216,6 +240,8 @@ function App() {
             onAddCrush={handleAddCrush}
             onSendCrushMessage={handleSendCrushMessage}
             onUpdateCrushEmoji={handleUpdateCrushEmoji}
+            onDeleteCrush={handleDeleteCrush}
+            onBlockUser={handleBlockUser}
             premium={premium}
             streamerInfo={streamerInfo}
           />
