@@ -35,13 +35,13 @@ export default function StreamerBanner({ streamerName, daysLeft, onDismiss }: St
             {/* Text */}
             <div className="flex-1 min-w-0">
               <p className="text-white font-bold text-sm">
-                You're on <span className="text-freak-pink">{streamerName}</span>'s stream! 🎮
+                Welcome to <span className="text-freak-pink">{streamerName}</span>'s community 🎮
               </p>
               <div className="flex items-center gap-1.5 mt-1">
                 <Zap size={12} className="text-freak-pink shrink-0" />
                 <p className="text-freak-muted text-xs">
-                  <span className="text-white font-medium">Freaky+ activated</span>
-                  {' '}· {daysLeft} day{daysLeft !== 1 ? 's' : ''} free
+                  <span className="text-white font-medium">Freaky+ free for {daysLeft} days</span>
+                  {' '}· stream plays while you chat
                 </p>
               </div>
             </div>

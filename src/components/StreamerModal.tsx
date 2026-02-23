@@ -84,8 +84,8 @@ export default function StreamerModal({ onClose }: StreamerModalProps) {
                 <Zap size={20} className="text-freak-pink" />
               </div>
               <div>
-                <h2 className="text-white font-bold text-xl">Streamer Mode</h2>
-                <p className="text-freak-muted text-xs">Get your link. Bring your chat.</p>
+                <h2 className="text-white font-bold text-xl">Streamer Mode 🎮</h2>
+                <p className="text-freak-muted text-xs">Connect with your viewers. Farm the clips.</p>
               </div>
             </div>
           </div>
@@ -93,10 +93,13 @@ export default function StreamerModal({ onClose }: StreamerModalProps) {
           {step === 'form' && (
             <div className="p-6 space-y-4">
               {/* Pitch */}
-              <div className="bg-freak-pink/10 border border-freak-pink/20 rounded-2xl p-4 text-sm text-freak-muted">
-                Share your Freaky link on stream →{' '}
-                <span className="text-white font-medium">viewers get 1 week of Freaky+ free</span>{' '}
-                and watch your stream while they chat 🎮
+              <div className="bg-freak-pink/10 border border-freak-pink/20 rounded-2xl p-4 space-y-2">
+                <p className="text-white text-sm font-medium leading-snug">
+                  Your viewers jump on Freaky — random video calls, live, while watching your stream in the corner.
+                </p>
+                <p className="text-freak-muted text-xs leading-relaxed">
+                  The reactions. The chaos. The clips. Growth at your stature — share one link and let it run. 🔥
+                </p>
               </div>
 
               {/* Streamer name */}
@@ -154,8 +157,8 @@ export default function StreamerModal({ onClose }: StreamerModalProps) {
               {/* Success */}
               <div className="text-center">
                 <div className="text-4xl mb-2">🔥</div>
-                <h3 className="text-white font-bold text-lg">You're live, {streamerName}!</h3>
-                <p className="text-freak-muted text-sm">Drop this link on stream. Viewers get 1 week of Freaky+ free.</p>
+                <h3 className="text-white font-bold text-lg">Let's get it, {streamerName}!</h3>
+                <p className="text-freak-muted text-sm">Drop this in chat. Your viewers connect with strangers, live, while watching you. Clip season.</p>
               </div>
 
               {/* Link box */}
@@ -183,11 +186,24 @@ export default function StreamerModal({ onClose }: StreamerModalProps) {
               </p>
 
               {/* What viewers get */}
-              <div className="bg-freak-surface border border-freak-border rounded-2xl p-4 space-y-2 text-sm">
-                <p className="text-white font-medium text-xs uppercase tracking-wider">What your viewers get 👇</p>
-                <div className="flex items-center gap-2 text-freak-muted"><Zap size={14} className="text-freak-pink" /> <span>Freaky+ badge for 7 days</span></div>
-                <div className="flex items-center gap-2 text-freak-muted"><span className="text-freak-pink">🎮</span> <span>Your stream playing while they chat</span></div>
-                <div className="flex items-center gap-2 text-freak-muted"><span className="text-freak-pink">⚡</span> <span>Priority matching in the queue</span></div>
+              <div className="bg-freak-surface border border-freak-border rounded-2xl p-4 space-y-2.5 text-sm">
+                <p className="text-white font-bold text-xs uppercase tracking-wider">What your chat gets 👇</p>
+                <div className="flex items-center gap-2 text-freak-muted">
+                  <Zap size={14} className="text-freak-pink shrink-0" />
+                  <span><span className="text-white">Freaky+ free for 7 days</span> — the moment they click your link</span>
+                </div>
+                <div className="flex items-center gap-2 text-freak-muted">
+                  <span className="text-freak-pink shrink-0">🎮</span>
+                  <span><span className="text-white">Your stream in the corner</span> — they watch you while they chat strangers</span>
+                </div>
+                <div className="flex items-center gap-2 text-freak-muted">
+                  <span className="text-freak-pink shrink-0">⚡</span>
+                  <span><span className="text-white">Priority queue</span> — skip the wait, jump straight in</span>
+                </div>
+                <div className="flex items-center gap-2 text-freak-muted">
+                  <span className="text-freak-pink shrink-0">📈</span>
+                  <span><span className="text-white">You get the clips</span> — wild reactions, unfiltered moments, real content</span>
+                </div>
               </div>
 
               <motion.button

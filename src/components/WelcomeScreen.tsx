@@ -91,11 +91,11 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, premium, streame
         {/* Streamer mode button */}
         <motion.button
           onClick={() => setShowStreamerModal(true)}
-          className="w-full flex items-center justify-center gap-2 text-freak-muted text-sm py-2 hover:text-freak-pink transition-colors"
+          className="w-full flex items-center justify-center gap-2 text-freak-muted text-sm py-2 hover:text-freak-pink transition-colors group"
           whileTap={{ scale: 0.97 }}
         >
-          <Tv size={14} />
-          Are you a streamer? Get your link →
+          <Tv size={14} className="group-hover:text-freak-pink transition-colors" />
+          <span>Streamers — connect with your viewers 🎮</span>
         </motion.button>
       </motion.div>
 
