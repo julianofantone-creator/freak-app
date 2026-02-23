@@ -178,6 +178,13 @@ const VideoChat: React.FC<VideoChatProps> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCharacter, activeAccessories, activeBackground, localStream, isConnected, getCanvasVideoTrack, getCanvasStream, replaceVideoTrack])
 
+  // Mutual crush detection in date mode (both liked each other → celebrate)
+  useEffect(() => {
+    if (incomingCrush && crushedCurrentPartner && chatMode === 'date') {
+      setMutualCrush(true)
+    }
+  }, [incomingCrush, crushedCurrentPartner, chatMode])
+
   // Date mode countdown
   useEffect(() => {
     if (dateTimeLeft === null || dateTimeLeft <= 0) {
@@ -425,6 +432,39 @@ const VideoChat: React.FC<VideoChatProps> = ({
           </div>
         )}
       </div>
+
+      {/* ─── DATE MODE: MUTUAL CRUSH / IT'S A MATCH ─── */}
+      <AnimatePresence>
+        {mutualCrush && chatMode === 'date' && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
+            onClick={() => setMutualCrush(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.5, rotate: -5 }}
+              animate={{ scale: 1, rotate: 0 }}
+              transition={{ type: 'spring', damping: 15, stiffness: 300 }}
+              className="bg-freak-surface border-2 border-freak-pink rounded-3xl p-8 mx-6 flex flex-col items-center gap-4 shadow-pink max-w-xs w-full text-center"
+            >
+              <motion.div
+                animate={{ scale: [1, 1.2, 1] }}
+                transition={{ duration: 0.6, repeat: 3 }}
+                className="text-6xl"
+              >
+                💕
+              </motion.div>
+              <div>
+                <h2 className="text-freak-pink font-black text-3xl tracking-tight mb-1">It's a Match!</h2>
+                <p className="text-freak-muted text-sm">You and <span className="text-white font-semibold">{currentPartner?.username}</span> liked each other 🔥</p>
+              </div>
+              <p className="text-freak-muted text-xs">They're now in your Crushes. Tap anywhere to keep chatting.</p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* ─── DATE MODE: TIME'S UP OVERLAY ─── */}
       <AnimatePresence>
