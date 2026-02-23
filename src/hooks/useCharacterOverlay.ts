@@ -606,6 +606,75 @@ function computeHeadRoll(landmarks: NormalizedLandmark[], W: number, H: number):
   return Math.max(-0.38, Math.min(0.38, angle))    // clamp to ±~22°
 }
 
+// ─── Eyebrow landmarks ────────────────────────────────────────────────────────
+const BROW_RIGHT = [70, 63, 105, 66, 107]   // outer → inner
+const BROW_LEFT  = [336, 296, 334, 293, 300]
+
+function computeEyeEAR(
+  landmarks: NormalizedLandmark[],
+  vTop: number, vBot: number, hLeft: number, hRight: number,
+  W: number, H: number
+): number {
+  const top   = lm(landmarks, vTop,   W, H)
+  const bot   = lm(landmarks, vBot,   W, H)
+  const left  = lm(landmarks, hLeft,  W, H)
+  const right = lm(landmarks, hRight, W, H)
+  const v = Math.abs(top.y - bot.y)
+  const h = Math.abs(right.x - left.x) || 1
+  return Math.min(1, v / h)
+}
+
+function drawEyebrows(
+  ctx: CanvasRenderingContext2D, char: Character,
+  landmarks: NormalizedLandmark[], W: number, H: number, faceH: number
+) {
+  const browColor = char.eyeRing ?? char.skin
+  ctx.save()
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round'
+  ;[BROW_RIGHT, BROW_LEFT].forEach(indices => {
+    const pts = indices.map(i => lm(landmarks, i, W, H))
+    // Main brow stroke
+    ctx.beginPath()
+    pts.forEach((p, n) => n === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y))
+    ctx.strokeStyle = browColor; ctx.lineWidth = faceH * 0.030; ctx.stroke()
+    // Subtle shadow beneath for depth
+    ctx.beginPath()
+    pts.forEach((p, n) => n === 0 ? ctx.moveTo(p.x, p.y + faceH * 0.016) : ctx.lineTo(p.x, p.y + faceH * 0.016))
+    ctx.strokeStyle = 'rgba(0,0,0,0.22)'; ctx.lineWidth = faceH * 0.010; ctx.stroke()
+  })
+  ctx.restore()
+}
+
+function drawEyelids(
+  ctx: CanvasRenderingContext2D, char: Character,
+  landmarks: NormalizedLandmark[], W: number, H: number, faceH: number,
+  leftCenter: { x: number; y: number }, rightCenter: { x: number; y: number }
+) {
+  // EAR: fully open ≈ 0.28, blink < 0.10
+  const rEAR = computeEyeEAR(landmarks, 159, 145, 33,  133, W, H)
+  const lEAR = computeEyeEAR(landmarks, 386, 374, 362, 263, W, H)
+
+  const drawLid = (center: { x: number; y: number }, ear: number, eyeIdx: number[]) => {
+    const openness = Math.min(1, Math.max(0, (ear - 0.05) / 0.23))
+    if (openness > 0.75) return  // eye open enough — nothing to draw
+    const coverage = 1 - openness
+    const pts  = eyeIdx.map(i => lm(landmarks, i, W, H))
+    const eyeW = (Math.max(...pts.map(p => p.x)) - Math.min(...pts.map(p => p.x))) * 0.52
+    const eyeH = Math.max(4, (Math.max(...pts.map(p => p.y)) - Math.min(...pts.map(p => p.y))) * 0.55)
+    ctx.save()
+    ctx.beginPath()
+    ctx.ellipse(center.x, center.y, eyeW, eyeH * coverage, 0, 0, Math.PI * 2)
+    ctx.fillStyle = char.skin; ctx.fill()
+    if (char.eyeRing) {
+      ctx.strokeStyle = char.eyeRing; ctx.lineWidth = faceH * 0.012; ctx.stroke()
+    }
+    ctx.restore()
+  }
+
+  drawLid(rightCenter, rEAR, RIGHT_EYE)
+  drawLid(leftCenter,  lEAR, LEFT_EYE)
+}
+
 function drawNameTag(ctx: CanvasRenderingContext2D, char: Character,
                      landmarks: NormalizedLandmark[], W: number, H: number) {
   const chin=lm(landmarks,LM_CHIN,W,H)
@@ -912,6 +981,28 @@ export function useCharacterOverlay({ localStream }: UseCharacterOverlayOptions)
               ctx.stroke()
             })
             ctx.restore()
+
+            // ── Eyebrows (live expression tracking) ──────────────────────────
+            drawEyebrows(ctx, char, landmarks, W, H, faceH)
+
+            // ── Eyelids (blink tracking — covers eye holes when eye closes) ─
+            drawEyelids(ctx, char, landmarks, W, H, faceH, leftEyeCenter, rightEyeCenter)
+
+            // ── Mouth glow when talking ───────────────────────────────────────
+            const innerTop  = lm(landmarks, 13, W, H)
+            const innerBot  = lm(landmarks, 14, W, H)
+            const mouthOpen = Math.min(1, Math.abs(innerBot.y - innerTop.y) / (faceH * 0.12))
+            if (mouthOpen > 0.25) {
+              const mc = { x: (innerTop.x + innerBot.x) / 2, y: (innerTop.y + innerBot.y) / 2 }
+              const mg = ctx.createRadialGradient(mc.x, mc.y, 0, mc.x, mc.y, faceH * 0.1)
+              mg.addColorStop(0, `rgba(255,220,150,${0.40 * mouthOpen})`)
+              mg.addColorStop(1, 'transparent')
+              ctx.save()
+              ctx.beginPath()
+              tracePoly(ctx, landmarks, LIPS_OUTER, W, H)
+              ctx.fillStyle = mg; ctx.fill()
+              ctx.restore()
+            }
 
             drawDecorations(ctx, char, landmarks, W, H)
             drawNameTag(ctx, char, landmarks, W, H)
