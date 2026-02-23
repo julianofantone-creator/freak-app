@@ -56,7 +56,11 @@ const VideoChat: React.FC<VideoChatProps> = ({
   const [showCharacterPicker, setShowCharacterPicker] = useState(false)
 
   // ── Character overlay ──────────────────────────────────────────────────────
-  const { activeCharacter, selectCharacter, getCanvasVideoTrack, getCanvasStream } = useCharacterOverlay({
+  const {
+    activeCharacter, selectCharacter,
+    activeAccessories, toggleAccessory, clearAccessories,
+    getCanvasVideoTrack, getCanvasStream
+  } = useCharacterOverlay({
     localStream,
     videoRef: localVideoRef,
   })
@@ -148,9 +152,11 @@ const VideoChat: React.FC<VideoChatProps> = ({
 
   // When character changes: replace WebRTC track + swap local video preview to canvas
   // (must be after useFreakSocket so replaceVideoTrack is in scope)
+  // Swap WebRTC track to canvas when character OR accessories are active
   useEffect(() => {
     if (!localStream) return
-    if (activeCharacter) {
+    const hasFilter = !!activeCharacter || activeAccessories.length > 0
+    if (hasFilter) {
       const canvasTrack = getCanvasVideoTrack()
       if (canvasTrack) replaceVideoTrack(canvasTrack)
       const canvasStream = getCanvasStream()
@@ -163,7 +169,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
         localVideoRef.current.srcObject = localStream
       }
     }
-  }, [activeCharacter, localStream, getCanvasVideoTrack, getCanvasStream, replaceVideoTrack])
+  }, [activeCharacter, activeAccessories, localStream, getCanvasVideoTrack, getCanvasStream, replaceVideoTrack])
 
   const startSearch = useCallback(async () => {
     const stream = await initMedia()
@@ -426,12 +432,17 @@ const VideoChat: React.FC<VideoChatProps> = ({
           <motion.button
             onClick={() => setShowCharacterPicker(true)}
             whileTap={{ scale: 0.9 }}
-            className={`w-11 h-11 rounded-full flex items-center justify-center relative ${activeCharacter ? 'bg-freak-pink shadow-pink' : 'bg-freak-surface border border-freak-border'}`}
+            className={`w-11 h-11 rounded-full flex items-center justify-center relative ${(activeCharacter || activeAccessories.length > 0) ? 'bg-freak-pink shadow-pink' : 'bg-freak-surface border border-freak-border'}`}
             title="Face Masks"
           >
             <Sparkles className="w-5 h-5 text-white" />
             {activeCharacter && (
               <span className="absolute -top-1 -right-1 text-sm">{activeCharacter.emoji}</span>
+            )}
+            {!activeCharacter && activeAccessories.length > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-white rounded-full flex items-center justify-center text-[9px] font-bold text-freak-pink">
+                {activeAccessories.length}
+              </span>
             )}
           </motion.button>
         </div>
@@ -467,7 +478,10 @@ const VideoChat: React.FC<VideoChatProps> = ({
         {showCharacterPicker && (
           <CharacterPicker
             activeCharacter={activeCharacter}
+            activeAccessories={activeAccessories}
             onSelect={selectCharacter}
+            onToggleAccessory={toggleAccessory}
+            onClearAccessories={clearAccessories}
             onClose={() => setShowCharacterPicker(false)}
           />
         )}
