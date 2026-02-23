@@ -7,7 +7,7 @@ import CrushesPanel from './CrushesPanel'
 import StreamOverlay from './StreamOverlay'
 import CharacterPicker from './CharacterPicker'
 import { useFreakSocket } from '../hooks/useFreakSocket'
-import { useCharacterOverlay } from '../hooks/useCharacterOverlay'
+import { useCharacterOverlay, ACCESSORIES } from '../hooks/useCharacterOverlay'
 
 interface VideoChatProps {
   user: User
@@ -42,6 +42,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
 }) => {
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
+  const previewVideoRef = useRef<HTMLVideoElement>(null)
   const previewCanvasRef = useRef<HTMLCanvasElement>(null)
   const pendingCrushIdRef = useRef<string | null>(null) // tracks last crush we sent a msg to (for ack mapping)
 
@@ -161,12 +162,17 @@ const VideoChat: React.FC<VideoChatProps> = ({
     },
   })
 
-  // ── Local video element srcObject ───────────────────────────────────────
-  // Keep the in-call local video showing the raw camera feed.
+  // ── Local video srcObject (in-call + idle preview) ──────────────────────
   useEffect(() => {
-    if (localVideoRef.current && localStream) {
-      localVideoRef.current.srcObject = localStream
-      localVideoRef.current.play().catch(() => {})
+    if (localStream) {
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = localStream
+        localVideoRef.current.play().catch(() => {})
+      }
+      if (previewVideoRef.current) {
+        previewVideoRef.current.srcObject = localStream
+        previewVideoRef.current.play().catch(() => {})
+      }
     }
   }, [localStream])
 
@@ -379,19 +385,60 @@ const VideoChat: React.FC<VideoChatProps> = ({
 
             {/* ── Camera preview pane ── */}
             {localStream ? (
-              /* Camera is on — show live canvas preview */
+              /* Camera is on — show preview with live filter overlays */
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 className="w-full max-w-sm rounded-2xl overflow-hidden border-2 border-freak-pink/50 relative bg-black shadow-pink flex-shrink-0"
                 style={{ aspectRatio: '4/3' }}
               >
-                <canvas
-                  ref={previewCanvasRef}
-                  width={640} height={480}
-                  style={{ width: '100%', height: '100%', display: 'block' }}
+                {/* Raw camera — always shows, no canvas dependency */}
+                <video
+                  ref={previewVideoRef}
+                  autoPlay muted playsInline
+                  className="absolute inset-0 w-full h-full object-cover"
+                  style={{ transform: 'scaleX(-1)' }}
                 />
-                {/* Filter button — bottom-right corner of preview */}
+
+                {/* Background canvas — only used when a bg filter is active */}
+                {activeBackground !== 'none' && (
+                  <canvas
+                    ref={previewCanvasRef}
+                    width={640} height={480}
+                    className="absolute inset-0 w-full h-full"
+                    style={{ display: 'block' }}
+                  />
+                )}
+
+                {/* Character skin tint overlay */}
+                {activeCharacter && (
+                  <div
+                    className="absolute inset-0 pointer-events-none"
+                    style={{ backgroundColor: activeCharacter.skin.replace(/[\d.]+\)$/, '0.45)') }}
+                  />
+                )}
+
+                {/* Character emoji + label badge */}
+                {activeCharacter && (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none gap-2">
+                    <span style={{ fontSize: 72, lineHeight: 1 }}>{activeCharacter.emoji}</span>
+                    <span className="bg-black/60 text-white text-xs font-bold px-3 py-1 rounded-full">
+                      {activeCharacter.label}
+                    </span>
+                  </div>
+                )}
+
+                {/* Active accessories strip */}
+                {activeAccessories.length > 0 && !activeCharacter && (
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex gap-1 pointer-events-none">
+                    {activeAccessories.slice(0, 3).map(id => {
+                      const acc = ACCESSORIES.find(a => a.id === id)
+                      return acc ? <span key={id} style={{ fontSize: 48 }}>{acc.emoji}</span> : null
+                    })}
+                  </div>
+                )}
+
+                {/* Filter button — bottom-right */}
                 <motion.button
                   onClick={async () => { await initMedia(); setShowCharacterPicker(true) }}
                   whileTap={{ scale: 0.88 }}
@@ -402,12 +449,9 @@ const VideoChat: React.FC<VideoChatProps> = ({
                   }`}
                 >
                   <Sparkles className="w-3.5 h-3.5" />
-                  {activeCharacter ? activeCharacter.label : 'Filters'}
+                  {activeCharacter ? activeCharacter.label : activeBackground !== 'none' ? '🌆 BG' : 'Filters'}
                 </motion.button>
-                {/* Loading dot */}
-                {!filterReady && (
-                  <div className="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-yellow-400 animate-pulse" title="Loading face filters…" />
-                )}
+
                 {/* Your name badge */}
                 <div className="absolute top-2.5 left-2.5 bg-black/50 backdrop-blur-sm px-2.5 py-1 rounded-full">
                   <span className="text-white text-xs font-semibold">you</span>
