@@ -7,7 +7,7 @@ import CrushesPanel from './CrushesPanel'
 import StreamOverlay from './StreamOverlay'
 import CharacterPicker from './CharacterPicker'
 import { useFreakSocket } from '../hooks/useFreakSocket'
-import { useCharacterOverlay, ACCESSORIES } from '../hooks/useCharacterOverlay'
+import { useCharacterOverlay } from '../hooks/useCharacterOverlay'
 
 interface VideoChatProps {
   user: User
@@ -385,14 +385,14 @@ const VideoChat: React.FC<VideoChatProps> = ({
 
             {/* ── Camera preview pane ── */}
             {localStream ? (
-              /* Camera is on — show preview with live filter overlays */
+              /* Camera on — canvas shows face-tracked filter output (MediaPipe) */
               <motion.div
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 className="w-full max-w-sm rounded-2xl overflow-hidden border-2 border-freak-pink/50 relative bg-black shadow-pink flex-shrink-0"
                 style={{ aspectRatio: '4/3' }}
               >
-                {/* Raw camera — always shows, no canvas dependency */}
+                {/* Raw video underneath — visible while MediaPipe loads */}
                 <video
                   ref={previewVideoRef}
                   autoPlay muted playsInline
@@ -400,41 +400,29 @@ const VideoChat: React.FC<VideoChatProps> = ({
                   style={{ transform: 'scaleX(-1)' }}
                 />
 
-                {/* Background canvas — only used when a bg filter is active */}
-                {activeBackground !== 'none' && (
-                  <canvas
-                    ref={previewCanvasRef}
-                    width={640} height={480}
-                    className="absolute inset-0 w-full h-full"
-                    style={{ display: 'block' }}
-                  />
-                )}
+                {/* Canvas on top — face-tracked filter output (hook blits every frame) */}
+                {/* Fades in once filterReady; draws raw video + any active filter on top */}
+                <canvas
+                  ref={previewCanvasRef}
+                  width={640} height={480}
+                  className="absolute inset-0 w-full h-full"
+                  style={{
+                    display: 'block',
+                    opacity: filterReady ? 1 : 0,
+                    transition: 'opacity 0.4s ease',
+                  }}
+                />
 
-                {/* Character skin tint overlay */}
-                {activeCharacter && (
-                  <div
-                    className="absolute inset-0 pointer-events-none"
-                    style={{ backgroundColor: activeCharacter.skin.replace(/[\d.]+\)$/, '0.45)') }}
-                  />
-                )}
-
-                {/* Character emoji + label badge */}
-                {activeCharacter && (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none gap-2">
-                    <span style={{ fontSize: 72, lineHeight: 1 }}>{activeCharacter.emoji}</span>
-                    <span className="bg-black/60 text-white text-xs font-bold px-3 py-1 rounded-full">
-                      {activeCharacter.label}
-                    </span>
-                  </div>
-                )}
-
-                {/* Active accessories strip */}
-                {activeAccessories.length > 0 && !activeCharacter && (
-                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex gap-1 pointer-events-none">
-                    {activeAccessories.slice(0, 3).map(id => {
-                      const acc = ACCESSORIES.find(a => a.id === id)
-                      return acc ? <span key={id} style={{ fontSize: 48 }}>{acc.emoji}</span> : null
-                    })}
+                {/* Spinner while MediaPipe loads */}
+                {!filterReady && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="flex flex-col items-center gap-2 bg-black/40 backdrop-blur-sm px-4 py-3 rounded-2xl">
+                      <svg className="animate-spin w-5 h-5 text-freak-pink" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
+                      </svg>
+                      <span className="text-white text-xs font-medium">Loading filters…</span>
+                    </div>
                   </div>
                 )}
 
@@ -456,6 +444,15 @@ const VideoChat: React.FC<VideoChatProps> = ({
                 <div className="absolute top-2.5 left-2.5 bg-black/50 backdrop-blur-sm px-2.5 py-1 rounded-full">
                   <span className="text-white text-xs font-semibold">you</span>
                 </div>
+
+                {/* Active filter badge */}
+                {(activeCharacter || activeAccessories.length > 0 || activeBackground !== 'none') && (
+                  <div className="absolute top-2.5 right-2.5 bg-freak-pink/90 px-2 py-0.5 rounded-full">
+                    <span className="text-white text-xs font-bold">
+                      {activeCharacter ? activeCharacter.emoji : activeBackground !== 'none' ? '🌆' : `+${activeAccessories.length}`}
+                    </span>
+                  </div>
+                )}
               </motion.div>
             ) : (
               /* No camera yet — placeholder */
@@ -688,9 +685,16 @@ const VideoChat: React.FC<VideoChatProps> = ({
             </motion.button>
           )}
 
-          <motion.button onClick={toggleVideo} whileTap={{ scale: 0.9 }}
-            className={`w-11 h-11 rounded-full flex items-center justify-center ${isVideoOn ? 'bg-freak-surface border border-freak-border' : 'bg-red-500'}`}>
-            {isVideoOn ? <Video className="w-5 h-5 text-white" /> : <VideoOff className="w-5 h-5 text-white" />}
+          <motion.button
+            onClick={localStream ? toggleVideo : () => initMedia()}
+            whileTap={{ scale: 0.9 }}
+            className={`w-11 h-11 rounded-full flex items-center justify-center ${
+              !localStream ? 'bg-freak-surface border border-freak-border border-dashed' :
+              isVideoOn ? 'bg-freak-surface border border-freak-border' : 'bg-red-500'
+            }`}
+            title={!localStream ? 'Start camera preview' : isVideoOn ? 'Turn off camera' : 'Turn on camera'}
+          >
+            {isVideoOn || !localStream ? <Video className="w-5 h-5 text-white" /> : <VideoOff className="w-5 h-5 text-white" />}
           </motion.button>
 
           {/* Face Mask button — also pre-starts camera so filter preview works */}
