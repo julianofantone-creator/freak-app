@@ -815,6 +815,21 @@ export function useCharacterOverlay({ localStream, displayCanvasRef }: UseCharac
     maskCanvas.width = 1280; maskCanvas.height = 720
     const mctx = maskCanvas.getContext('2d')!
 
+    // ── Skin texture noise (created once, reused every frame) ────────────
+    const noiseSize = 192
+    const noiseEl = document.createElement('canvas')
+    noiseEl.width = noiseSize; noiseEl.height = noiseSize
+    const nctx = noiseEl.getContext('2d')!
+    const noiseImg = nctx.createImageData(noiseSize, noiseSize)
+    for (let i = 0; i < noiseImg.data.length; i += 4) {
+      const v = Math.random()
+      const b = v > 0.5 ? 255 : 0
+      noiseImg.data[i] = b; noiseImg.data[i+1] = b; noiseImg.data[i+2] = b
+      noiseImg.data[i+3] = Math.floor(v * 38)  // very subtle alpha
+    }
+    nctx.putImageData(noiseImg, 0, 0)
+    const noisePattern = mctx.createPattern(noiseEl, 'repeat')
+
     // Segmentation canvas for person cutout
     const segCanvas = document.createElement('canvas')
     segCanvas.width = 1280; segCanvas.height = 720
@@ -944,33 +959,94 @@ export function useCharacterOverlay({ localStream, displayCanvasRef }: UseCharac
             tracePoly(mctx as unknown as CanvasRenderingContext2D, landmarks, RIGHT_EYE,  W, H); mctx.fill()
             tracePoly(mctx as unknown as CanvasRenderingContext2D, landmarks, LIPS_OUTER, W, H); mctx.fill()
 
-            // ── 3D shading — source-atop means it only draws where face skin exists ──
+            // ── Enhanced 3D shading ───────────────────────────────────────────
             mctx.globalCompositeOperation = 'source-atop'
-            mctx.filter = 'none'  // no blur on shading gradients
+            mctx.filter = 'none'
 
-            // Specular highlight: bright spot upper-left, shifts with head rotation
             const lightX = faceCX - faceW * (0.22 - yaw * 0.28)
-            const lightY = foreheadP.y + faceH * 0.18
-            const hlGrad = mctx.createRadialGradient(lightX, lightY, 0, faceCX, foreheadP.y + faceH*0.42, faceH*0.55)
-            hlGrad.addColorStop(0,    'rgba(255,255,255,0.38)')
-            hlGrad.addColorStop(0.45, 'rgba(255,255,255,0.07)')
+            const lightY = foreheadP.y + faceH * 0.14
+
+            // 1. Primary specular — tight bright hot spot (moves with yaw)
+            const hlGrad = mctx.createRadialGradient(lightX, lightY, 0, lightX, lightY, faceH * 0.30)
+            hlGrad.addColorStop(0,    'rgba(255,255,255,0.68)')
+            hlGrad.addColorStop(0.22, 'rgba(255,255,255,0.26)')
             hlGrad.addColorStop(1,    'rgba(0,0,0,0)')
             mctx.fillStyle = hlGrad; mctx.fillRect(0, 0, W, H)
 
-            // Edge shadow: darkens the perimeter to give spherical volume
-            const shadowCX = faceCX + yaw * faceW * 0.12
+            // 2. Diffuse fill — wide soft secondary light across face
+            const dfGrad = mctx.createRadialGradient(
+              faceCX - faceW * 0.08, foreheadP.y + faceH * 0.28, 0,
+              faceCX, foreheadP.y + faceH * 0.4, faceH * 0.68)
+            dfGrad.addColorStop(0,   'rgba(255,255,255,0.12)')
+            dfGrad.addColorStop(0.5, 'rgba(255,255,255,0.04)')
+            dfGrad.addColorStop(1,   'rgba(0,0,0,0)')
+            mctx.fillStyle = dfGrad; mctx.fillRect(0, 0, W, H)
+
+            // 3. Rim light — cool blue edge highlight on opposite side
+            const rimX = faceCX + faceW * (0.42 + yaw * 0.10)
+            const rimY = foreheadP.y + faceH * 0.36
+            const rimGrad = mctx.createRadialGradient(rimX, rimY, 0, rimX, rimY, faceH * 0.52)
+            rimGrad.addColorStop(0,   'rgba(150,205,255,0.32)')
+            rimGrad.addColorStop(0.4, 'rgba(150,205,255,0.10)')
+            rimGrad.addColorStop(1,   'rgba(0,0,0,0)')
+            mctx.fillStyle = rimGrad; mctx.fillRect(0, 0, W, H)
+
+            // 4. Subsurface scattering — warm orange glow bleeding through at edges
+            const faceMidY = foreheadP.y + faceH * 0.45
+            const sssGrad = mctx.createRadialGradient(faceCX, faceMidY, faceH*0.28, faceCX, faceMidY, faceH*0.64)
+            sssGrad.addColorStop(0,    'rgba(0,0,0,0)')
+            sssGrad.addColorStop(0.62, 'rgba(255,100,40,0.08)')
+            sssGrad.addColorStop(1,    'rgba(220,50,10,0.20)')
+            mctx.fillStyle = sssGrad; mctx.fillRect(0, 0, W, H)
+
+            // 5. Form shadow — darkens opposite side from light source
+            const shadowCX = faceCX + faceW * (0.15 + yaw * 0.16)
             const shGrad = mctx.createRadialGradient(
-              shadowCX, foreheadP.y + faceH*0.45, faceH * 0.16,
-              shadowCX, foreheadP.y + faceH*0.45, faceH * 0.60
-            )
-            shGrad.addColorStop(0, 'rgba(0,0,0,0)')
-            shGrad.addColorStop(1, 'rgba(0,0,0,0.44)')
+              shadowCX, faceMidY, faceH * 0.18,
+              shadowCX, faceMidY, faceH * 0.64)
+            shGrad.addColorStop(0,   'rgba(0,0,0,0)')
+            shGrad.addColorStop(0.5, 'rgba(0,0,0,0.10)')
+            shGrad.addColorStop(1,   'rgba(0,0,0,0.56)')
             mctx.fillStyle = shGrad; mctx.fillRect(0, 0, W, H)
+
+            // 6. Chin / under-jaw shadow — face curves away at bottom
+            const chinGrad = mctx.createLinearGradient(0, chinP.y - faceH * 0.16, 0, chinP.y + faceH * 0.05)
+            chinGrad.addColorStop(0, 'rgba(0,0,0,0)')
+            chinGrad.addColorStop(1, 'rgba(0,0,0,0.34)')
+            mctx.fillStyle = chinGrad; mctx.fillRect(0, 0, W, H)
+
+            // 7. Eye socket depth — darken around each eye hole for recessed look
+            const leftEyeC  = { x: (lm(landmarks,385,W,H).x+lm(landmarks,386,W,H).x)/2, y: (lm(landmarks,385,W,H).y+lm(landmarks,386,W,H).y)/2 }
+            const rightEyeC = { x: (lm(landmarks,160,W,H).x+lm(landmarks,159,W,H).x)/2, y: (lm(landmarks,160,W,H).y+lm(landmarks,159,W,H).y)/2 }
+            ;[leftEyeC, rightEyeC].forEach(eye => {
+              const sg = mctx.createRadialGradient(eye.x, eye.y, faceH*0.015, eye.x, eye.y, faceH*0.11)
+              sg.addColorStop(0,   'rgba(0,0,0,0.52)')
+              sg.addColorStop(0.5, 'rgba(0,0,0,0.18)')
+              sg.addColorStop(1,   'rgba(0,0,0,0)')
+              mctx.fillStyle = sg; mctx.fillRect(0, 0, W, H)
+            })
+
+            // 8. Skin texture noise — subtle grain breaks up flat plastic look
+            if (noisePattern) {
+              mctx.globalAlpha = 0.055
+              mctx.fillStyle = noisePattern
+              mctx.fillRect(0, 0, W, H)
+              mctx.globalAlpha = 1
+            }
 
             mctx.globalCompositeOperation = 'source-over'
 
             // Composite face mask onto main canvas (inherits ctx perspective transform)
             ctx.drawImage(maskCanvas, 0, 0)
+
+            // ── Edge definition — thin stroke at face oval perimeter ──────────
+            // Adds crispness where character meets real face; uses semi-transparent skin color
+            ctx.save()
+            tracePoly(ctx, landmarks, FACE_OVAL, W, H)
+            ctx.strokeStyle = char.skin.replace(/[\d.]+\)$/, '0.40)')
+            ctx.lineWidth = Math.max(2, faceH * 0.012)
+            ctx.stroke()
+            ctx.restore()
 
             // ── Face skin tint: color-grade real face to match character ──
             // Tints the real face area (visible through eye/mouth holes) with
