@@ -71,10 +71,12 @@ const VideoChat: React.FC<VideoChatProps> = ({
     activeBackground, selectBackground,
     getCanvasVideoTrack,
     filterReady, filterError,
+    isMerging, startMerge, stopMerge,
   } = useCharacterOverlay({
     localStream,
     videoRef: localVideoRef,
     displayCanvasRef: previewCanvasRef,
+    remoteVideoRef,
   })
 
   // Map username → crushId for fast lookup
@@ -682,6 +684,31 @@ const VideoChat: React.FC<VideoChatProps> = ({
             <motion.button onClick={addCrush} whileTap={{ scale: 0.9 }} disabled={crushedCurrentPartner}
               className={`w-11 h-11 rounded-full flex items-center justify-center ${crushedCurrentPartner ? 'bg-freak-pink/30' : 'bg-freak-pink shadow-pink'}`}>
               <Heart className="w-5 h-5 text-white fill-white" />
+            </motion.button>
+          )}
+
+          {/* FACE MERGE button — only while connected */}
+          {isConnected && (
+            <motion.button
+              onClick={() => { isMerging ? stopMerge() : startMerge(); if (!isMerging) toast('Merging faces... 👾', { icon: '✨' }) }}
+              whileTap={{ scale: 0.88 }}
+              animate={isMerging ? { scale: [1, 1.08, 1] } : {}}
+              transition={{ repeat: Infinity, duration: 0.9 }}
+              className={`w-11 h-11 rounded-full flex items-center justify-center text-lg relative overflow-hidden ${
+                isMerging
+                  ? 'bg-gradient-to-br from-purple-600 to-fuchsia-500 shadow-[0_0_16px_rgba(180,0,255,0.7)]'
+                  : 'bg-freak-surface border border-purple-500/50'
+              }`}
+              title="Face Merge — morph faces together"
+            >
+              <span>👾</span>
+              {isMerging && (
+                <motion.div
+                  className="absolute inset-0 rounded-full border-2 border-fuchsia-400"
+                  animate={{ scale: [1, 1.6], opacity: [0.7, 0] }}
+                  transition={{ repeat: Infinity, duration: 0.85 }}
+                />
+              )}
             </motion.button>
           )}
 

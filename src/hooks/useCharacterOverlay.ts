@@ -750,25 +750,36 @@ interface UseCharacterOverlayOptions {
   videoRef: React.RefObject<HTMLVideoElement>
   /** Optional canvas element to blit every frame into (for live preview) */
   displayCanvasRef?: React.RefObject<HTMLCanvasElement>
+  /** Remote video element — used for Face Merge */
+  remoteVideoRef?: React.RefObject<HTMLVideoElement>
 }
 
-export function useCharacterOverlay({ localStream, displayCanvasRef }: UseCharacterOverlayOptions) {
+export function useCharacterOverlay({ localStream, displayCanvasRef, remoteVideoRef }: UseCharacterOverlayOptions) {
   const [activeCharacter,    setActiveCharacter]    = useState<Character | null>(null)
   const [activeAccessories,  setActiveAccessories]  = useState<string[]>([])
   const [activeBackground,   setActiveBackground]   = useState<string>('none')
   const [filterReady,        setFilterReady]        = useState(false)
   const [filterError,        setFilterError]        = useState<string | null>(null)
+  const [isMerging,          setIsMerging]          = useState(false)
 
-  const canvasRef         = useRef<HTMLCanvasElement | null>(null)
-  const canvasStreamRef   = useRef<MediaStream | null>(null)
-  const rafRef            = useRef<number | null>(null)
-  const activeCharRef     = useRef<Character | null>(null)
-  const activeAccRef      = useRef<string[]>([])
-  const activeBgRef       = useRef<string>('none')
-  const landmarkerRef     = useRef<FaceLandmarker | null>(null)
-  const landmarkerReady   = useRef(false)
-  const segmenterRef      = useRef<ImageSegmenter | null>(null)
-  const segmenterReady    = useRef(false)
+  const canvasRef              = useRef<HTMLCanvasElement | null>(null)
+  const canvasStreamRef        = useRef<MediaStream | null>(null)
+  const rafRef                 = useRef<number | null>(null)
+  const activeCharRef          = useRef<Character | null>(null)
+  const activeAccRef           = useRef<string[]>([])
+  const activeBgRef            = useRef<string>('none')
+  const landmarkerRef          = useRef<FaceLandmarker | null>(null)
+  const landmarkerReady        = useRef(false)
+  const segmenterRef           = useRef<ImageSegmenter | null>(null)
+  const segmenterReady         = useRef(false)
+  // ── Face Merge ──────────────────────────────────────────────────────────────
+  const isMergingRef           = useRef(false)
+  const mergeRatioRef          = useRef(0)          // 0 = normal, 0.5 = fully merged
+  const remoteLandmarkerRef    = useRef<FaceLandmarker | null>(null)
+  const remoteLandmarkerReady  = useRef(false)
+  const remoteLmRef            = useRef<NormalizedLandmark[] | null>(null)
+  const remoteLastTRef         = useRef(0)
+  const mergeInitRef           = useRef(false)
 
   useEffect(() => { activeCharRef.current  = activeCharacter    }, [activeCharacter])
   useEffect(() => { activeAccRef.current   = activeAccessories  }, [activeAccessories])
@@ -951,6 +962,13 @@ export function useCharacterOverlay({ localStream, displayCanvasRef }: UseCharac
       // ── Character + accessories on top of video/bg ────────────────────
       // Landmarks detection is OPTIONAL — if FaceLandmarker failed to load we
       // still show the fallback tint + emoji so the user knows the filter is ON.
+      // ── Face Merge: animate ratio + detect remote landmarks ─────────────
+      const mergeTarget = isMergingRef.current ? 0.5 : 0
+      if (mergeRatioRef.current < mergeTarget)
+        mergeRatioRef.current = Math.min(mergeTarget, mergeRatioRef.current + 0.010)
+      else if (mergeRatioRef.current > mergeTarget)
+        mergeRatioRef.current = Math.max(mergeTarget, mergeRatioRef.current - 0.015)
+
       const hasFilter = !!char || accs.length > 0
       if (hasFilter) {
         let landmarks: NormalizedLandmark[] | null = null
@@ -959,6 +977,27 @@ export function useCharacterOverlay({ localStream, displayCanvasRef }: UseCharac
             const result = landmarkerRef.current.detectForVideo(vid, t)
             landmarks = result.faceLandmarks[0] ?? null
           } catch (_) {}
+        }
+
+        // ── Remote landmark detection for merge (max ~15fps) ───────────
+        const mr = mergeRatioRef.current
+        const remVid = remoteVideoRef?.current
+        if (mr > 0 && remoteLandmarkerReady.current && remoteLandmarkerRef.current && remVid && remVid.readyState >= 2) {
+          if (t - remoteLastTRef.current > 66) {
+            try {
+              const rRes = remoteLandmarkerRef.current.detectForVideo(remVid, Date.now())
+              remoteLmRef.current = rRes.faceLandmarks[0] ?? null
+              remoteLastTRef.current = t
+            } catch (_) {}
+          }
+        }
+
+        // ── Blend local + remote landmarks ────────────────────────────
+        if (mr > 0.01 && remoteLmRef.current && landmarks) {
+          landmarks = landmarks.map((p, i) => {
+            const r = remoteLmRef.current![i] ?? p
+            return { x: p.x*(1-mr) + r.x*mr, y: p.y*(1-mr) + r.y*mr, z: (p.z??0)*(1-mr) + (r.z??0)*mr, visibility: p.visibility }
+          })
         }
 
         if (landmarks) {
@@ -971,6 +1010,22 @@ export function useCharacterOverlay({ localStream, displayCanvasRef }: UseCharac
           const faceCY    = (foreheadP.y + chinP.y) / 2
           const faceW     = Math.abs(rightEarP.x - leftEarP.x)
           const faceH     = chinP.y - foreheadP.y
+
+          // ── Merge glow: pulsing purple/pink aura ──────────────────
+          if (mr > 0.05) {
+            const pulse = 0.6 + 0.4 * Math.sin(t * 0.006)
+            ctx.save()
+            ctx.shadowBlur = 28; ctx.shadowColor = `rgba(220,0,255,${0.8 * pulse})`
+            tracePoly(ctx, landmarks, FACE_OVAL, W, H)
+            ctx.strokeStyle = `rgba(200,0,255,${0.55 * mr * pulse})`
+            ctx.lineWidth = faceH * 0.06 * mr; ctx.stroke()
+            // Second ring — hot pink
+            ctx.shadowColor = `rgba(255,0,150,${0.6 * pulse})`
+            tracePoly(ctx, landmarks, FACE_OVAL, W, H)
+            ctx.strokeStyle = `rgba(255,0,150,${0.35 * mr * pulse})`
+            ctx.lineWidth = faceH * 0.10 * mr; ctx.stroke()
+            ctx.restore()
+          }
           const yaw       = computeHeadYaw(landmarks, W, H)
           const roll      = computeHeadRoll(landmarks, W, H)
           // Perspective squeeze: face squishes when turned (3D illusion)
@@ -1322,13 +1377,64 @@ export function useCharacterOverlay({ localStream, displayCanvasRef }: UseCharac
   const clearAccessories    = useCallback(() => setActiveAccessories([]), [])
   const selectBackground    = useCallback((id: string) => setActiveBackground(id), [])
 
+  // ── Face Merge callbacks ─────────────────────────────────────────────────────
+  const startMerge = useCallback(async () => {
+    isMergingRef.current = true
+    setIsMerging(true)
+    // Lazy-init a separate FaceLandmarker for the remote video stream
+    if (!mergeInitRef.current) {
+      mergeInitRef.current = true
+      try {
+        const vision = await FilesetResolver.forVisionTasks(
+          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
+        )
+        const fl = await FaceLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+            delegate: 'GPU',
+          },
+          runningMode: 'VIDEO', numFaces: 1,
+          outputFaceBlendshapes: false,
+          minFaceDetectionConfidence: 0.3, minFacePresenceScore: 0.3, minTrackingConfidence: 0.3,
+        })
+        remoteLandmarkerRef.current = fl
+        remoteLandmarkerReady.current = true
+      } catch {
+        // CPU fallback
+        try {
+          const vision2 = await FilesetResolver.forVisionTasks(
+            'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
+          )
+          const fl2 = await FaceLandmarker.createFromOptions(vision2, {
+            baseOptions: {
+              modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task',
+              delegate: 'CPU',
+            },
+            runningMode: 'VIDEO', numFaces: 1,
+            outputFaceBlendshapes: false,
+            minFaceDetectionConfidence: 0.3, minFacePresenceScore: 0.3, minTrackingConfidence: 0.3,
+          })
+          remoteLandmarkerRef.current = fl2
+          remoteLandmarkerReady.current = true
+        } catch { /* merge will just use local face only */ }
+      }
+    }
+  }, [])
+
+  const stopMerge = useCallback(() => {
+    isMergingRef.current = false
+    setIsMerging(false)
+  }, [])
+
   return {
     activeCharacter, selectCharacter,
     activeAccessories, toggleAccessory, clearAccessories,
     activeBackground, selectBackground,
     getCanvasVideoTrack, getCanvasStream,
     filterReady, filterError,
-    canvasRef,   // expose so VideoChat can show canvas directly in preview
+    canvasRef,
     CHARACTERS,
+    // Face Merge
+    isMerging, startMerge, stopMerge,
   }
 }
