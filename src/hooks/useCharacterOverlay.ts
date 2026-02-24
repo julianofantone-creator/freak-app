@@ -475,20 +475,7 @@ function drawCharacterBody(ctx: CanvasRenderingContext2D, char: Character,
     ctx.fillStyle = char.skin; ctx.fill()
 
   } else {
-    // Generic: draw neck + shoulder extension below chin
-    const neckW = faceW * 0.35
-    const shoulderW = faceW * 0.75
-    const neckTop = chin.y
-    const neckH = faceH * 0.25
-    const shoulderH = faceH * 0.2
-
-    // Neck rectangle
-    ctx.fillStyle = char.skin
-    ctx.fillRect(faceCX - neckW/2, neckTop, neckW, neckH)
-    // Shoulder ellipse
-    ctx.beginPath()
-    ctx.ellipse(faceCX, neckTop + neckH + shoulderH/2, shoulderW/2, shoulderH/2, 0, 0, Math.PI*2)
-    ctx.fill()
+    // No neck/shoulder — face only
   }
 
   ctx.restore()
@@ -660,6 +647,241 @@ function computeHeadRoll(landmarks: NormalizedLandmark[], W: number, H: number):
   return Math.max(-0.38, Math.min(0.38, angle))    // clamp to ±~22°
 }
 
+// ─── Expression system ────────────────────────────────────────────────────────
+interface FaceExpressions {
+  browRaise:  number  // 0=neutral … 1=fully shocked/raised
+  mouthOpen:  number  // 0=closed … 1=wide open
+  smileRatio: number  // -1=frown … 0=neutral … 1=big smile
+  eyeOpenL:   number  // 0=closed … 1=wide open
+  eyeOpenR:   number
+}
+
+function computeExpressions(
+  landmarks: NormalizedLandmark[], W: number, H: number, faceH: number
+): FaceExpressions {
+  const BROW_R_IDX = [70, 63, 105, 66, 107]
+  const BROW_L_IDX = [336, 296, 334, 293, 300]
+  const RE_IDX     = [33,7,163,144,145,153,154,155,133,173,157,158,159,160,161,246]
+  const LE_IDX     = [362,382,381,380,374,373,390,249,263,466,388,387,386,385,384,398]
+
+  // Brow raise: gap between brow midpoint and eye top, normalized
+  const browRMid = BROW_R_IDX.reduce((s,i)=>s+lm(landmarks,i,W,H).y,0) / BROW_R_IDX.length
+  const browLMid = BROW_L_IDX.reduce((s,i)=>s+lm(landmarks,i,W,H).y,0) / BROW_L_IDX.length
+  const eyeRTop  = Math.min(...RE_IDX.map(i=>lm(landmarks,i,W,H).y))
+  const eyeLTop  = Math.min(...LE_IDX.map(i=>lm(landmarks,i,W,H).y))
+  const gapR = (eyeRTop - browRMid) / faceH
+  const gapL = (eyeLTop - browLMid) / faceH
+  // neutral gap ≈ 0.08, shocked ≈ 0.20
+  const browRaise = Math.max(0, Math.min(1, ((gapR + gapL) / 2 - 0.07) / 0.14))
+
+  // Mouth open
+  const iTop = lm(landmarks, 13, W, H)
+  const iBot = lm(landmarks, 14, W, H)
+  const mouthOpen = Math.min(1, Math.abs(iBot.y - iTop.y) / (faceH * 0.14))
+
+  // Smile: lip corner horizontal spread (wider = more smile)
+  const lCorner = lm(landmarks, 61,  W, H)
+  const rCorner = lm(landmarks, 291, W, H)
+  const lipSpread = Math.abs(rCorner.x - lCorner.x) / faceH
+  // neutral ≈ 0.35, smile ≈ 0.52, frown ≈ 0.25
+  const smileRatio = Math.max(-1, Math.min(1, (lipSpread - 0.35) / 0.18))
+
+  // Eye openness (EAR)
+  const rEAR = computeEyeEAR(landmarks, 159, 145, 33,  133, W, H)
+  const lEAR = computeEyeEAR(landmarks, 386, 374, 362, 263, W, H)
+  const eyeOpenR = Math.min(1, rEAR / 0.24)
+  const eyeOpenL = Math.min(1, lEAR / 0.24)
+
+  return { browRaise, mouthOpen, smileRatio, eyeOpenL, eyeOpenR }
+}
+
+// ─── Expression visuals ───────────────────────────────────────────────────────
+function drawMouthExpression(
+  ctx: CanvasRenderingContext2D, char: Character,
+  landmarks: NormalizedLandmark[], W: number, H: number, faceH: number,
+  expr: FaceExpressions
+) {
+  if (expr.mouthOpen < 0.18 && expr.smileRatio < 0.25) return
+  const iTop = lm(landmarks, 13, W, H)
+  const iBot = lm(landmarks, 14, W, H)
+  const lCorner = lm(landmarks, 61, W, H)
+  const rCorner = lm(landmarks, 291, W, H)
+  const mc = { x: (lCorner.x + rCorner.x) / 2, y: (iTop.y + iBot.y) / 2 }
+  const mW = Math.abs(rCorner.x - lCorner.x) * (1 + expr.smileRatio * 0.5 + expr.mouthOpen * 0.4)
+  const mH = Math.abs(iBot.y - iTop.y) * (1 + expr.mouthOpen * 1.2) + faceH * 0.015
+
+  ctx.save()
+  switch (char.id) {
+    case 'skull': {
+      // Jaw-drop: dark hollow mouth + jagged teeth top
+      if (expr.mouthOpen > 0.25) {
+        ctx.fillStyle = 'rgba(0,0,0,0.88)'
+        ctx.beginPath(); ctx.ellipse(mc.x, mc.y + mH*0.1, mW*0.62, mH*0.72, 0, 0, Math.PI*2); ctx.fill()
+        // Top teeth row
+        ctx.fillStyle = 'rgba(240,240,230,0.95)'
+        const teeth = 5, tw = mW * 0.9 / teeth
+        for (let i = 0; i < teeth; i++) {
+          const tx = mc.x - mW*0.45 + tw*(i+0.5)
+          ctx.fillRect(tx - tw*0.35, mc.y - mH*0.08, tw*0.7, mH * 0.4 * expr.mouthOpen)
+        }
+      }
+      break
+    }
+    case 'clown': {
+      // Exaggerated red lips that grow with the smile
+      ctx.strokeStyle = '#cc0000'; ctx.lineWidth = faceH * 0.022; ctx.lineCap = 'round'
+      const smileArc = expr.smileRatio * faceH * 0.06
+      ctx.beginPath()
+      ctx.moveTo(lCorner.x - faceH*0.05, lCorner.y)
+      ctx.quadraticCurveTo(mc.x, mc.y + smileArc + mH*0.4, rCorner.x + faceH*0.05, rCorner.y)
+      ctx.stroke()
+      if (expr.mouthOpen > 0.3) {
+        ctx.fillStyle = 'rgba(20,0,0,0.75)'
+        ctx.beginPath(); ctx.ellipse(mc.x, mc.y + mH*0.15, mW*0.5, mH*0.55, 0, 0, Math.PI*2); ctx.fill()
+      }
+      break
+    }
+    case 'devil': {
+      // Fangs appear when smiling + mouth opens
+      if (expr.mouthOpen > 0.2 || expr.smileRatio > 0.3) {
+        ctx.strokeStyle = '#880000'; ctx.lineWidth = faceH * 0.016
+        const cornerLift = expr.smileRatio * faceH * 0.04
+        ctx.beginPath()
+        ctx.moveTo(lCorner.x - faceH*0.03, lCorner.y - cornerLift)
+        ctx.quadraticCurveTo(mc.x, mc.y + faceH*0.02, rCorner.x + faceH*0.03, rCorner.y - cornerLift)
+        ctx.stroke()
+        if (expr.mouthOpen > 0.25) {
+          // Two fangs
+          ctx.fillStyle = 'rgba(245,240,240,0.92)'
+          ;[-1,1].forEach(side => {
+            ctx.beginPath()
+            ctx.moveTo(mc.x + side*mW*0.18, mc.y - mH*0.05)
+            ctx.lineTo(mc.x + side*mW*0.30, mc.y - mH*0.05)
+            ctx.lineTo(mc.x + side*mW*0.24, mc.y + mH*0.55 * expr.mouthOpen)
+            ctx.closePath(); ctx.fill()
+          })
+        }
+      }
+      break
+    }
+    case 'pickle': {
+      // Wavy cartoon smile around mouth
+      ctx.strokeStyle = '#2d5a1b'; ctx.lineWidth = faceH * 0.018; ctx.lineCap = 'round'
+      const lift = expr.smileRatio * faceH * 0.05 + expr.mouthOpen * faceH * 0.04
+      ctx.beginPath()
+      ctx.moveTo(lCorner.x - faceH*0.04, lCorner.y - lift*0.3)
+      ctx.bezierCurveTo(
+        mc.x - mW*0.2, mc.y + lift + mH*0.3,
+        mc.x + mW*0.2, mc.y + lift + mH*0.3,
+        rCorner.x + faceH*0.04, rCorner.y - lift*0.3
+      )
+      ctx.stroke()
+      break
+    }
+    case 'peanut': {
+      // Warm brown smile line
+      if (expr.smileRatio > 0.1 || expr.mouthOpen > 0.15) {
+        ctx.strokeStyle = '#7a5c20'; ctx.lineWidth = faceH * 0.022; ctx.lineCap = 'round'
+        const lift = expr.smileRatio * faceH * 0.05
+        ctx.beginPath()
+        ctx.moveTo(lCorner.x - faceH*0.03, lCorner.y - lift*0.4)
+        ctx.quadraticCurveTo(mc.x, mc.y + lift + mH*0.4 * expr.mouthOpen, rCorner.x + faceH*0.03, rCorner.y - lift*0.4)
+        ctx.stroke()
+      }
+      break
+    }
+    case 'robot': {
+      // Rectangular speaker mouth
+      if (expr.mouthOpen > 0.15 || expr.smileRatio > 0.2) {
+        ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = faceH * 0.012
+        const boxH = Math.max(faceH*0.04, mH * (0.5 + expr.mouthOpen * 0.8))
+        ctx.strokeRect(mc.x - mW*0.48, mc.y - boxH*0.4, mW*0.96, boxH)
+        // Frequency bars inside
+        ctx.fillStyle = `rgba(0,229,255,${0.5 + expr.mouthOpen * 0.4})`
+        const bars = 5
+        for (let b = 0; b < bars; b++) {
+          const bh = boxH * (0.3 + Math.sin(b * 1.8) * 0.35) * (0.4 + expr.mouthOpen * 0.8)
+          ctx.fillRect(mc.x - mW*0.42 + b*(mW*0.84/bars), mc.y + boxH*0.3 - bh, mW*0.84/bars*0.72, bh)
+        }
+      }
+      break
+    }
+    case 'ghost': {
+      // Wavy ghost mouth
+      ctx.strokeStyle = `rgba(220,100,255,${0.7 + expr.mouthOpen * 0.3})`
+      ctx.lineWidth = faceH * 0.018; ctx.lineCap = 'round'
+      const waves = 4; const ww = mW / waves
+      ctx.beginPath(); ctx.moveTo(lCorner.x - faceH*0.02, mc.y)
+      for (let w = 0; w < waves; w++) {
+        const wx = lCorner.x - faceH*0.02 + ww * w
+        ctx.quadraticCurveTo(wx + ww*0.25, mc.y + (w%2===0 ? 1:-1)*faceH*0.03*(1+expr.mouthOpen), wx + ww*0.5, mc.y)
+        ctx.quadraticCurveTo(wx + ww*0.75, mc.y + (w%2===0 ? -1:1)*faceH*0.03*(1+expr.mouthOpen), wx + ww, mc.y)
+      }
+      ctx.stroke()
+      break
+    }
+    default: {
+      // Generic: colored outline that grows with expressions
+      if (expr.smileRatio > 0.2 || expr.mouthOpen > 0.2) {
+        ctx.strokeStyle = (char.eyeRing ?? char.skin).replace(/[\d.]+\)$/, '0.80)')
+        ctx.lineWidth = faceH * 0.020; ctx.lineCap = 'round'
+        const lift = expr.smileRatio * faceH * 0.04
+        ctx.beginPath()
+        ctx.moveTo(lCorner.x - faceH*0.025, lCorner.y - lift*0.4)
+        ctx.quadraticCurveTo(mc.x, mc.y + lift + mH * 0.35 * (1 + expr.mouthOpen), rCorner.x + faceH*0.025, rCorner.y - lift*0.4)
+        ctx.stroke()
+      }
+      break
+    }
+  }
+  ctx.restore()
+}
+
+function drawSurpriseEffect(
+  ctx: CanvasRenderingContext2D, char: Character,
+  landmarks: NormalizedLandmark[], W: number, H: number, faceH: number,
+  expr: FaceExpressions, t: number
+) {
+  if (expr.browRaise < 0.45) return
+  const intensity = (expr.browRaise - 0.45) / 0.55  // 0→1 only when shocked
+  const forehead = lm(landmarks, LM_FOREHEAD, W, H)
+  const leftEar  = lm(landmarks, LM_LEFT_EAR, W, H)
+  const rightEar = lm(landmarks, LM_RIGHT_EAR, W, H)
+  const faceCX = (leftEar.x + rightEar.x) / 2
+
+  ctx.save()
+
+  // Radiating shock lines above eyebrows
+  const lineCount = 8
+  const innerR = faceH * 0.28
+  const outerR = faceH * (0.38 + intensity * 0.28)
+  const centerY = forehead.y - faceH * 0.08
+  ctx.strokeStyle = (char.eyeRing ?? char.skin).replace(/[\d.]+\)$/, `${0.55 * intensity})`)
+  ctx.lineWidth = Math.max(1.5, faceH * 0.012)
+  ctx.lineCap = 'round'
+  for (let i = 0; i < lineCount; i++) {
+    const angle = (Math.PI * 1.5) + (i - lineCount/2) * (Math.PI * 0.9 / lineCount)
+    const wobble = Math.sin(t * 0.015 + i) * faceH * 0.012 * intensity
+    ctx.beginPath()
+    ctx.moveTo(faceCX + Math.cos(angle) * (innerR + wobble), centerY + Math.sin(angle) * innerR)
+    ctx.lineTo(faceCX + Math.cos(angle) * (outerR + wobble), centerY + Math.sin(angle) * (outerR * 0.85))
+    ctx.stroke()
+  }
+
+  // "!!" text above head when fully shocked
+  if (intensity > 0.7) {
+    const textScale = intensity * 0.9
+    ctx.font = `bold ${faceH * 0.22 * textScale}px sans-serif`
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+    ctx.fillStyle = (char.eyeRing ?? '#ffffff').replace(/[\d.]+\)$/, `${0.9 * intensity})`)
+    // Slight shake effect
+    const shakeX = Math.sin(t * 0.025) * faceH * 0.018 * intensity
+    ctx.fillText('!!', faceCX + shakeX, forehead.y - faceH * 0.42 * textScale)
+  }
+
+  ctx.restore()
+}
+
 // ─── Eyebrow landmarks ────────────────────────────────────────────────────────
 const BROW_RIGHT = [70, 63, 105, 66, 107]   // outer → inner
 const BROW_LEFT  = [336, 296, 334, 293, 300]
@@ -680,17 +902,23 @@ function computeEyeEAR(
 
 function drawEyebrows(
   ctx: CanvasRenderingContext2D, char: Character,
-  landmarks: NormalizedLandmark[], W: number, H: number, faceH: number
+  landmarks: NormalizedLandmark[], W: number, H: number, faceH: number,
+  expr?: FaceExpressions
 ) {
   const browColor = char.eyeRing ?? char.skin
+  // Amplify vertical lift: up to 10% of faceH extra when fully shocked
+  const lift = expr ? expr.browRaise * faceH * 0.10 : 0
+  // Extra thickness when shocked (eyebrows get "heavier" under shock)
+  const thickness = faceH * (0.030 + (expr?.browRaise ?? 0) * 0.018)
+
   ctx.save()
   ctx.lineCap = 'round'; ctx.lineJoin = 'round'
   ;[BROW_RIGHT, BROW_LEFT].forEach(indices => {
-    const pts = indices.map(i => lm(landmarks, i, W, H))
+    const pts = indices.map(i => { const p = lm(landmarks, i, W, H); return { x: p.x, y: p.y - lift } })
     // Main brow stroke
     ctx.beginPath()
     pts.forEach((p, n) => n === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y))
-    ctx.strokeStyle = browColor; ctx.lineWidth = faceH * 0.030; ctx.stroke()
+    ctx.strokeStyle = browColor; ctx.lineWidth = thickness; ctx.stroke()
     // Subtle shadow beneath for depth
     ctx.beginPath()
     pts.forEach((p, n) => n === 0 ? ctx.moveTo(p.x, p.y + faceH * 0.016) : ctx.lineTo(p.x, p.y + faceH * 0.016))
@@ -1285,27 +1513,32 @@ export function useCharacterOverlay({ localStream, displayCanvasRef, remoteVideo
             })
             ctx.restore()
 
-            // ── Eyebrows (live expression tracking) ──────────────────────────
-            drawEyebrows(ctx, char, landmarks, W, H, faceH)
+            // ── Expressions: compute once, drive everything ───────────────
+            const expr = computeExpressions(landmarks, W, H, faceH)
 
-            // ── Eyelids (blink tracking — covers eye holes when eye closes) ─
+            // ── Eyebrows — amplified by browRaise ─────────────────────────
+            drawEyebrows(ctx, char, landmarks, W, H, faceH, expr)
+
+            // ── Shock lines + "!!" above head ─────────────────────────────
+            drawSurpriseEffect(ctx, char, landmarks, W, H, faceH, expr, t)
+
+            // ── Eyelids (blink tracking) ──────────────────────────────────
             drawEyelids(ctx, char, landmarks, W, H, faceH, leftEyeCenter, rightEyeCenter)
 
-            // ── Mouth glow when talking ───────────────────────────────────────
-            const innerTop  = lm(landmarks, 13, W, H)
-            const innerBot  = lm(landmarks, 14, W, H)
-            const mouthOpen = Math.min(1, Math.abs(innerBot.y - innerTop.y) / (faceH * 0.12))
-            if (mouthOpen > 0.25) {
-              const mc = { x: (innerTop.x + innerBot.x) / 2, y: (innerTop.y + innerBot.y) / 2 }
-              const mg = ctx.createRadialGradient(mc.x, mc.y, 0, mc.x, mc.y, faceH * 0.1)
-              mg.addColorStop(0, `rgba(255,220,150,${0.40 * mouthOpen})`)
+            // ── Mouth: inner glow + character expression overlay ──────────
+            if (expr.mouthOpen > 0.15) {
+              const iTop2 = lm(landmarks, 13, W, H)
+              const iBot2 = lm(landmarks, 14, W, H)
+              const mc2   = { x: (iTop2.x + iBot2.x) / 2, y: (iTop2.y + iBot2.y) / 2 }
+              const mg    = ctx.createRadialGradient(mc2.x, mc2.y, 0, mc2.x, mc2.y, faceH * 0.11)
+              mg.addColorStop(0, `rgba(255,220,150,${0.38 * expr.mouthOpen})`)
               mg.addColorStop(1, 'transparent')
               ctx.save()
-              ctx.beginPath()
               tracePoly(ctx, landmarks, LIPS_OUTER, W, H)
               ctx.fillStyle = mg; ctx.fill()
               ctx.restore()
             }
+            drawMouthExpression(ctx, char, landmarks, W, H, faceH, expr)
 
             drawDecorations(ctx, char, landmarks, W, H)
             drawNameTag(ctx, char, landmarks, W, H)
