@@ -1401,116 +1401,286 @@ export function useCharacterOverlay({ localStream, displayCanvasRef, remoteVideo
                                       y: lm(landmarks,385,W,H).y * 0.5 + lm(landmarks,386,W,H).y * 0.5 }
             const rightEyeCenter = { x: lm(landmarks,160,W,H).x * 0.5 + lm(landmarks,159,W,H).x * 0.5,
                                       y: lm(landmarks,160,W,H).y * 0.5 + lm(landmarks,159,W,H).y * 0.5 }
-            const eyeR = faceH * 0.062
+            // ── HYPER-REALISTIC EYE SOCKET SYSTEM ─────────────────────────
+            // The key to looking like you ARE the character (not wearing a mask)
+            // is the socket depth gradient — real eye appears inside a recessed cavity
+            const eyeR    = faceH * 0.065
+            const holeR   = faceH * 0.042   // approx size of the eye cutout
             ctx.save()
-            ;[leftEyeCenter, rightEyeCenter].forEach(eye => {
+            ;[leftEyeCenter, rightEyeCenter].forEach((eye, eyeIdx) => {
+              const isLeft = eyeIdx === 0
+
+              // ── 1. SOCKET DEPTH GRADIENT ──────────────────────────────────
+              // Transparent at center (real eye shows through) → dark shadow at rim
+              // Creates the illusion the eye is inside a deep socket
+              const depthGrad = ctx.createRadialGradient(
+                eye.x, eye.y, holeR * 0.7,   // inner: transparent (eye hole zone)
+                eye.x, eye.y, eyeR * 1.55    // outer: dark shadow at socket rim
+              )
+              switch (char.id) {
+                case 'skull':
+                  depthGrad.addColorStop(0,    'transparent')
+                  depthGrad.addColorStop(0.30, 'rgba(5,3,2,0.0)')
+                  depthGrad.addColorStop(0.65, 'rgba(8,5,3,0.55)')
+                  depthGrad.addColorStop(1.0,  'rgba(2,1,0,0.92)')
+                  break
+                case 'devil':
+                  depthGrad.addColorStop(0,    'rgba(255,40,0,0.0)')
+                  depthGrad.addColorStop(0.35, 'rgba(255,40,0,0.12)')
+                  depthGrad.addColorStop(0.68, 'rgba(200,0,0,0.52)')
+                  depthGrad.addColorStop(1.0,  'rgba(120,0,0,0.85)')
+                  break
+                case 'ghost':
+                  depthGrad.addColorStop(0,    'rgba(200,80,255,0.08)')
+                  depthGrad.addColorStop(0.4,  'rgba(160,0,255,0.22)')
+                  depthGrad.addColorStop(0.75, 'rgba(100,0,180,0.48)')
+                  depthGrad.addColorStop(1.0,  'rgba(60,0,120,0.70)')
+                  break
+                case 'robot':
+                  depthGrad.addColorStop(0,    'rgba(0,229,255,0.10)')
+                  depthGrad.addColorStop(0.45, 'rgba(0,100,200,0.30)')
+                  depthGrad.addColorStop(0.78, 'rgba(0,20,60,0.65)')
+                  depthGrad.addColorStop(1.0,  'rgba(0,10,30,0.88)')
+                  break
+                case 'peanut':
+                  depthGrad.addColorStop(0,    'transparent')
+                  depthGrad.addColorStop(0.40, 'rgba(80,45,5,0.08)')
+                  depthGrad.addColorStop(0.70, 'rgba(60,30,0,0.38)')
+                  depthGrad.addColorStop(1.0,  'rgba(40,18,0,0.68)')
+                  break
+                case 'pickle':
+                  depthGrad.addColorStop(0,    'transparent')
+                  depthGrad.addColorStop(0.38, 'rgba(20,60,10,0.08)')
+                  depthGrad.addColorStop(0.70, 'rgba(15,50,8,0.42)')
+                  depthGrad.addColorStop(1.0,  'rgba(10,35,5,0.72)')
+                  break
+                default:
+                  depthGrad.addColorStop(0,    'transparent')
+                  depthGrad.addColorStop(0.40, 'rgba(0,0,0,0.05)')
+                  depthGrad.addColorStop(0.72, 'rgba(0,0,0,0.32)')
+                  depthGrad.addColorStop(1.0,  'rgba(0,0,0,0.60)')
+              }
+              ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR * 1.55, 0, Math.PI*2)
+              ctx.fillStyle = depthGrad; ctx.fill()
+
+              // ── 2. CHARACTER SOCKET RIM — the precise frame around the hole ─
               switch (char.id) {
                 case 'skull': {
-                  // Hollow black eye sockets — dark void with crack lines
-                  const sg = ctx.createRadialGradient(eye.x, eye.y, 0, eye.x, eye.y, eyeR * 1.6)
-                  sg.addColorStop(0, 'rgba(0,0,0,0.90)'); sg.addColorStop(0.7, 'rgba(20,10,10,0.65)'); sg.addColorStop(1, 'transparent')
-                  ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR * 1.6, 0, Math.PI*2); ctx.fill()
-                  ctx.strokeStyle = '#333'; ctx.lineWidth = faceH*0.015
-                  ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR * 1.1, 0, Math.PI*2); ctx.stroke(); break
+                  // Bone orbital socket — slightly ovoid, rough inner edge
+                  ctx.strokeStyle = 'rgba(200,192,178,0.85)'; ctx.lineWidth = faceH*0.016
+                  ctx.beginPath(); ctx.ellipse(eye.x, eye.y + eyeR*0.05, eyeR*1.10, eyeR*0.95, 0, 0, Math.PI*2); ctx.stroke()
+                  // Second inner ridge
+                  ctx.strokeStyle = 'rgba(160,148,132,0.50)'; ctx.lineWidth = faceH*0.008
+                  ctx.beginPath(); ctx.ellipse(eye.x, eye.y + eyeR*0.05, eyeR*1.30, eyeR*1.12, 0, 0, Math.PI*2); ctx.stroke()
+                  // Dark void fill in socket
+                  const vg = ctx.createRadialGradient(eye.x, eye.y, 0, eye.x, eye.y, eyeR)
+                  vg.addColorStop(0, 'rgba(0,0,0,0.72)'); vg.addColorStop(0.55, 'rgba(0,0,0,0.28)'); vg.addColorStop(1, 'transparent')
+                  ctx.fillStyle = vg; ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR, 0, Math.PI*2); ctx.fill()
+                  break
                 }
                 case 'robot': {
-                  // LED square eye — cyan glow
-                  const hw = eyeR * 1.3
-                  ctx.fillStyle = 'rgba(0,20,40,0.85)'
-                  ctx.fillRect(eye.x - hw, eye.y - hw*0.7, hw*2, hw*1.4)
-                  ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = faceH*0.018
-                  ctx.strokeRect(eye.x - hw, eye.y - hw*0.7, hw*2, hw*1.4)
-                  // Inner LED dot
-                  const lg = ctx.createRadialGradient(eye.x, eye.y, 0, eye.x, eye.y, eyeR*0.5)
-                  lg.addColorStop(0, 'rgba(0,255,255,0.95)'); lg.addColorStop(1, 'rgba(0,200,255,0)')
-                  ctx.fillStyle = lg; ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*0.5, 0, Math.PI*2); ctx.fill(); break
+                  // Metallic square LED frame with corner bolts
+                  const hw = eyeR * 1.22, hh = eyeR * 0.88
+                  // Dark panel
+                  ctx.fillStyle = 'rgba(0,8,20,0.82)'
+                  ctx.fillRect(eye.x - hw, eye.y - hh, hw*2, hh*2)
+                  // Cyan border
+                  ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = faceH*0.016
+                  ctx.strokeRect(eye.x - hw, eye.y - hh, hw*2, hh*2)
+                  // Corner bolts
+                  ;[[eye.x-hw, eye.y-hh],[eye.x+hw, eye.y-hh],[eye.x-hw, eye.y+hh],[eye.x+hw, eye.y+hh]].forEach(([bx,by]) => {
+                    ctx.beginPath(); ctx.arc(bx as number, by as number, faceH*0.015, 0, Math.PI*2)
+                    ctx.fillStyle = '#00b8d4'; ctx.fill()
+                  })
+                  // Scan line at top
+                  ctx.strokeStyle = 'rgba(0,229,255,0.6)'; ctx.lineWidth = faceH*0.006
+                  ctx.beginPath(); ctx.moveTo(eye.x - hw*0.85, eye.y - hh*0.55); ctx.lineTo(eye.x + hw*0.85, eye.y - hh*0.55); ctx.stroke()
+                  break
                 }
                 case 'devil': {
-                  // Glowing ember red eyes
-                  const dg = ctx.createRadialGradient(eye.x, eye.y, 0, eye.x, eye.y, eyeR * 1.8)
-                  dg.addColorStop(0, 'rgba(255,80,0,0.9)'); dg.addColorStop(0.4, 'rgba(200,0,0,0.6)'); dg.addColorStop(1, 'transparent')
-                  ctx.fillStyle = dg; ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*1.8, 0, Math.PI*2); ctx.fill()
-                  ctx.strokeStyle = '#ff2200'; ctx.lineWidth = faceH*0.014
-                  ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR, 0, Math.PI*2); ctx.stroke(); break
+                  // Fire socket rim — ember glow with inner flame
+                  const fg = ctx.createRadialGradient(eye.x, eye.y - eyeR*0.2, 0, eye.x, eye.y, eyeR*1.2)
+                  fg.addColorStop(0, 'rgba(255,140,0,0.45)'); fg.addColorStop(0.5, 'rgba(255,40,0,0.30)'); fg.addColorStop(1, 'transparent')
+                  ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*1.2, 0, Math.PI*2); ctx.fill()
+                  ctx.strokeStyle = '#ff3300'; ctx.lineWidth = faceH*0.018
+                  ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*1.0, 0, Math.PI*2); ctx.stroke()
+                  // Inner flame tip pointing up
+                  ctx.fillStyle = 'rgba(255,200,0,0.55)'
+                  ctx.beginPath(); ctx.ellipse(eye.x, eye.y - eyeR*0.85, eyeR*0.22, eyeR*0.42, 0, 0, Math.PI*2); ctx.fill()
+                  break
                 }
                 case 'ghost': {
-                  // Purple glow rings
-                  const gg = ctx.createRadialGradient(eye.x, eye.y, 0, eye.x, eye.y, eyeR*1.8)
-                  gg.addColorStop(0, 'rgba(220,100,255,0.85)'); gg.addColorStop(0.5, 'rgba(160,0,255,0.5)'); gg.addColorStop(1, 'transparent')
-                  ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*1.8, 0, Math.PI*2); ctx.fill(); break
+                  // Glowing portal rings
+                  ;[1.45, 1.10].forEach((r, i) => {
+                    const alpha = i === 0 ? 0.35 : 0.65
+                    ctx.strokeStyle = `rgba(210,80,255,${alpha})`; ctx.lineWidth = faceH*(i===0 ? 0.008 : 0.016)
+                    ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*r, 0, Math.PI*2); ctx.stroke()
+                  })
+                  const gg = ctx.createRadialGradient(eye.x, eye.y, 0, eye.x, eye.y, eyeR*0.8)
+                  gg.addColorStop(0, 'rgba(200,100,255,0.18)'); gg.addColorStop(1, 'transparent')
+                  ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*0.8, 0, Math.PI*2); ctx.fill()
+                  break
                 }
                 case 'clown': {
-                  // White ring + red tear drop below
-                  ctx.strokeStyle = '#fff'; ctx.lineWidth = faceH*0.028
-                  ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*1.2, 0, Math.PI*2); ctx.stroke()
-                  // Red tear drop
-                  ctx.fillStyle = 'rgba(220,0,0,0.85)'
-                  ctx.beginPath(); ctx.ellipse(eye.x, eye.y + eyeR*1.8, eyeR*0.3, eyeR*0.55, 0, 0, Math.PI*2); ctx.fill(); break
+                  // Diamond painted eye: white oval + red diamond top + blue bottom
+                  ctx.strokeStyle = '#fff'; ctx.lineWidth = faceH*0.022
+                  ctx.beginPath(); ctx.ellipse(eye.x, eye.y, eyeR*1.3, eyeR*1.0, 0, 0, Math.PI*2); ctx.stroke()
+                  // Red star-point above eye
+                  ctx.fillStyle = 'rgba(220,0,0,0.90)'
+                  ctx.beginPath(); ctx.moveTo(eye.x, eye.y - eyeR*1.5); ctx.lineTo(eye.x - eyeR*0.42, eye.y - eyeR*0.6); ctx.lineTo(eye.x + eyeR*0.42, eye.y - eyeR*0.6); ctx.closePath(); ctx.fill()
+                  // Blue teardrop below
+                  ctx.fillStyle = 'rgba(0,120,255,0.80)'
+                  ctx.beginPath(); ctx.moveTo(eye.x, eye.y + eyeR*1.6); ctx.lineTo(eye.x - eyeR*0.35, eye.y + eyeR*0.75); ctx.lineTo(eye.x + eyeR*0.35, eye.y + eyeR*0.75); ctx.closePath(); ctx.fill()
+                  break
                 }
                 case 'cat': {
-                  // Almond / cat-eye outline
-                  ctx.strokeStyle = char.eyeRing ?? '#795548'; ctx.lineWidth = faceH*0.024
-                  ctx.beginPath(); ctx.moveTo(eye.x - eyeR*1.4, eye.y)
-                  ctx.quadraticCurveTo(eye.x, eye.y - eyeR*0.9, eye.x + eyeR*1.4, eye.y)
-                  ctx.quadraticCurveTo(eye.x + eyeR*1.6, eye.y - eyeR*0.2, eye.x + eyeR*1.9, eye.y - eyeR*0.5)
+                  // Almond cat-eye with extended outer flick
+                  ctx.strokeStyle = '#3d2200'; ctx.lineWidth = faceH*0.022; ctx.lineCap = 'round'
+                  const flip = isLeft ? -1 : 1
+                  ctx.beginPath()
+                  ctx.moveTo(eye.x - eyeR*1.5, eye.y + eyeR*0.1)
+                  ctx.quadraticCurveTo(eye.x, eye.y - eyeR*1.1, eye.x + eyeR*1.5, eye.y + eyeR*0.1)
+                  ctx.quadraticCurveTo(eye.x, eye.y + eyeR*0.9, eye.x - eyeR*1.5, eye.y + eyeR*0.1)
                   ctx.stroke()
-                  ctx.beginPath(); ctx.moveTo(eye.x - eyeR*1.4, eye.y)
-                  ctx.quadraticCurveTo(eye.x, eye.y + eyeR*0.8, eye.x + eyeR*1.4, eye.y); ctx.stroke(); break
+                  // Cat-eye flick — extends outward
+                  ctx.beginPath()
+                  ctx.moveTo(eye.x + flip*eyeR*1.5, eye.y + eyeR*0.1)
+                  ctx.lineTo(eye.x + flip*eyeR*2.2, eye.y - eyeR*0.7)
+                  ctx.stroke()
+                  break
                 }
                 case 'frog': {
-                  // Protruding dome eye — big circle above eyebrow
-                  const domeY = eye.y - eyeR*0.8
-                  ctx.beginPath(); ctx.arc(eye.x, domeY, eyeR*1.5, 0, Math.PI*2)
-                  ctx.fillStyle = '#4CAF50'; ctx.fill()
-                  ctx.beginPath(); ctx.arc(eye.x, domeY, eyeR*0.9, 0, Math.PI*2)
+                  // Frog has PROTRUDING dome eyes ABOVE the real eyes (not cutting through)
+                  // Draw dome eye above, then a small connector arc back to real eye area
+                  const domeY = eye.y - eyeR*1.4
+                  ctx.beginPath(); ctx.arc(eye.x, domeY, eyeR*1.4, 0, Math.PI*2)
+                  ctx.fillStyle = 'rgba(76,175,80,0.92)'; ctx.fill()
+                  ctx.strokeStyle = '#2d6e30'; ctx.lineWidth = faceH*0.012; ctx.stroke()
+                  ctx.beginPath(); ctx.arc(eye.x, domeY, eyeR*0.85, 0, Math.PI*2)
                   ctx.fillStyle = '#fff'; ctx.fill()
-                  ctx.beginPath(); ctx.arc(eye.x, domeY, eyeR*0.45, 0, Math.PI*2)
-                  ctx.fillStyle = '#1b3a10'; ctx.fill()
+                  ctx.beginPath(); ctx.arc(eye.x + eyeR*0.12, domeY + eyeR*0.1, eyeR*0.42, 0, Math.PI*2)
+                  ctx.fillStyle = '#0d2b10'; ctx.fill()
                   // Shine
-                  ctx.beginPath(); ctx.arc(eye.x - eyeR*0.25, domeY - eyeR*0.3, eyeR*0.18, 0, Math.PI*2)
-                  ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fill(); break
+                  ctx.beginPath(); ctx.arc(eye.x - eyeR*0.22, domeY - eyeR*0.28, eyeR*0.18, 0, Math.PI*2)
+                  ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.fill()
+                  // Don't use socket gradient for frog (dome covers eye area)
+                  break
                 }
                 case 'alien': {
-                  // Huge black almond eye — no iris
-                  ctx.fillStyle = 'rgba(0,0,0,0.92)'
-                  ctx.beginPath(); ctx.ellipse(eye.x, eye.y, eyeR*1.7, eyeR*1.0, 0.2, 0, Math.PI*2); ctx.fill()
-                  // Subtle green reflection line
-                  ctx.strokeStyle = 'rgba(100,220,80,0.6)'; ctx.lineWidth = faceH*0.010
-                  ctx.beginPath(); ctx.ellipse(eye.x - eyeR*0.3, eye.y - eyeR*0.35, eyeR*0.8, eyeR*0.25, 0.3, 0, Math.PI); ctx.stroke(); break
+                  // Massive deep-black almond socket — no iris visible
+                  ctx.fillStyle = 'rgba(0,0,0,0.94)'
+                  ctx.beginPath(); ctx.ellipse(eye.x, eye.y, eyeR*1.85, eyeR*1.1, 0.18, 0, Math.PI*2); ctx.fill()
+                  // Thin iridescent rim
+                  ctx.strokeStyle = 'rgba(80,220,100,0.65)'; ctx.lineWidth = faceH*0.010
+                  ctx.beginPath(); ctx.ellipse(eye.x, eye.y, eyeR*1.85, eyeR*1.1, 0.18, 0, Math.PI*2); ctx.stroke()
+                  // Green reflection arc
+                  ctx.strokeStyle = 'rgba(120,255,80,0.40)'; ctx.lineWidth = faceH*0.008
+                  ctx.beginPath(); ctx.ellipse(eye.x - eyeR*0.35, eye.y - eyeR*0.38, eyeR*0.9, eyeR*0.28, 0.25, 0, Math.PI); ctx.stroke()
+                  break
                 }
                 case 'pickle': {
-                  // Round cartoon pickle eye — white sclera + green pupil
-                  ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*1.5, 0, Math.PI*2)
-                  ctx.fillStyle = '#fff'; ctx.fill()
-                  ctx.strokeStyle = '#2d5a1b'; ctx.lineWidth = faceH*0.020; ctx.stroke()
-                  ctx.beginPath(); ctx.arc(eye.x + eyeR*0.15, eye.y + eyeR*0.1, eyeR*0.65, 0, Math.PI*2)
-                  ctx.fillStyle = '#2d7a1b'; ctx.fill()
-                  ctx.beginPath(); ctx.arc(eye.x + eyeR*0.15, eye.y + eyeR*0.1, eyeR*0.28, 0, Math.PI*2)
-                  ctx.fillStyle = '#111'; ctx.fill()
-                  ctx.beginPath(); ctx.arc(eye.x - eyeR*0.1, eye.y - eyeR*0.25, eyeR*0.22, 0, Math.PI*2)
-                  ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fill(); break
+                  // White sclera ring — thick cartoon outline with green iris hint
+                  ctx.fillStyle = 'rgba(255,255,255,0.88)'
+                  ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*1.4, 0, Math.PI*2); ctx.fill()
+                  ctx.strokeStyle = '#1e4a12'; ctx.lineWidth = faceH*0.020; ctx.stroke()
+                  // Green iris (partial — real eye shows through center)
+                  const irisGrad = ctx.createRadialGradient(eye.x, eye.y, holeR*0.85, eye.x, eye.y, eyeR*1.05)
+                  irisGrad.addColorStop(0, 'transparent')
+                  irisGrad.addColorStop(0.5, 'rgba(45,122,27,0.50)')
+                  irisGrad.addColorStop(1,   'rgba(30,88,16,0.70)')
+                  ctx.fillStyle = irisGrad; ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*1.05, 0, Math.PI*2); ctx.fill()
+                  // Pupil ring hint
+                  ctx.strokeStyle = 'rgba(10,30,5,0.60)'; ctx.lineWidth = faceH*0.010
+                  ctx.beginPath(); ctx.arc(eye.x, eye.y, holeR*1.05, 0, Math.PI*2); ctx.stroke()
+                  break
                 }
                 case 'peanut': {
-                  // Warm cartoon peanut eye — tan ring, heavy top eyelid
-                  ctx.strokeStyle = '#7a5c20'; ctx.lineWidth = faceH*0.030
-                  ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*1.3, 0, Math.PI*2); ctx.stroke()
-                  // Heavy top eyelid stroke
-                  ctx.strokeStyle = '#4a3010'; ctx.lineWidth = faceH*0.022
-                  ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*1.3, Math.PI*1.15, Math.PI*1.85); ctx.stroke(); break
+                  // Warm tan socket with crease lines — the "eye whites" area
+                  ctx.fillStyle = 'rgba(235,210,155,0.72)'
+                  ctx.beginPath(); ctx.ellipse(eye.x, eye.y, eyeR*1.25, eyeR*0.95, 0, 0, Math.PI*2); ctx.fill()
+                  // Outer brown rim
+                  ctx.strokeStyle = '#7a5020'; ctx.lineWidth = faceH*0.022
+                  ctx.beginPath(); ctx.ellipse(eye.x, eye.y, eyeR*1.25, eyeR*0.95, 0, 0, Math.PI*2); ctx.stroke()
+                  // Heavy upper eyelid crease (TheBurntPeanut look)
+                  ctx.strokeStyle = '#4a2e08'; ctx.lineWidth = faceH*0.026; ctx.lineCap = 'round'
+                  ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*1.25, Math.PI*1.12, Math.PI*1.88); ctx.stroke()
+                  // Iris tint ring
+                  const irisP = ctx.createRadialGradient(eye.x, eye.y, holeR*0.8, eye.x, eye.y, eyeR*0.95)
+                  irisP.addColorStop(0, 'transparent'); irisP.addColorStop(0.6, 'rgba(140,90,20,0.28)'); irisP.addColorStop(1, 'rgba(100,60,10,0.45)')
+                  ctx.fillStyle = irisP; ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*0.95, 0, Math.PI*2); ctx.fill()
+                  break
                 }
-                case 'bear':
+                case 'bear': {
+                  // Dark circles with white inner eye highlight
+                  ctx.fillStyle = 'rgba(40,22,10,0.72)'
+                  ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*1.3, 0, Math.PI*2); ctx.fill()
+                  ctx.strokeStyle = '#1a0e05'; ctx.lineWidth = faceH*0.020; ctx.stroke()
+                  ctx.fillStyle = 'rgba(255,248,240,0.25)'
+                  ctx.beginPath(); ctx.arc(eye.x, eye.y - eyeR*0.2, eyeR*0.75, 0, Math.PI*2); ctx.fill()
+                  break
+                }
                 case 'panda': {
-                  ctx.strokeStyle = char.eyeRing ?? '#333'; ctx.lineWidth = faceH*0.028
-                  ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*1.2, 0, Math.PI*2); ctx.stroke(); break
+                  // Large black eye patch + inner white sclera
+                  ctx.fillStyle = 'rgba(22,18,18,0.85)'
+                  ctx.beginPath(); ctx.ellipse(eye.x, eye.y, eyeR*1.6, eyeR*1.35, isLeft ? 0.2 : -0.2, 0, Math.PI*2); ctx.fill()
+                  ctx.fillStyle = 'rgba(255,250,245,0.22)'
+                  ctx.beginPath(); ctx.arc(eye.x, eye.y - eyeR*0.15, eyeR*0.72, 0, Math.PI*2); ctx.fill()
+                  break
                 }
                 default: {
-                  // Default cartoon ring
+                  // Generic: socket ring
                   ctx.strokeStyle = char.eyeRing ?? char.skin
-                  ctx.lineWidth = faceH * 0.025
-                  ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR * 1.4, 0, Math.PI*2); ctx.stroke(); break
+                  ctx.lineWidth = faceH * 0.024
+                  ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR * 1.28, 0, Math.PI*2); ctx.stroke()
+                  break
                 }
               }
+
+              // ── 3. EYELASH ARC — top of eye cutout, all characters ────────
+              // Thin radiating lash strokes along the upper eye arc
+              if (!['frog','alien','robot'].includes(char.id)) {
+                const lashColor = char.eyeRing ? char.eyeRing.replace(/[\d.]+\)$/, '0.72)') : 'rgba(20,10,0,0.72)'
+                ctx.strokeStyle = lashColor; ctx.lineWidth = faceH * 0.008; ctx.lineCap = 'round'
+                const lashCount = 9, lashInR = eyeR * 1.05, lashOutR = eyeR * 1.48
+                for (let l = 0; l < lashCount; l++) {
+                  // Fan across the top arc (from ~200° to ~340° — upper semi)
+                  const ang = Math.PI * (1.22 + (l / (lashCount-1)) * 0.56)
+                  ctx.beginPath()
+                  ctx.moveTo(eye.x + Math.cos(ang)*lashInR, eye.y + Math.sin(ang)*lashInR)
+                  ctx.lineTo(eye.x + Math.cos(ang)*lashOutR, eye.y + Math.sin(ang)*lashOutR)
+                  ctx.stroke()
+                }
+              }
+
+              // ── 4. LIP/IRIS INNER RIM — thin precise line at hole edge ─────
+              // Makes the eye cutout look FINISHED — not a raw hole
+              if (!['alien','frog','skull'].includes(char.id)) {
+                const rimColor = char.eyeRing ? char.eyeRing.replace(/[\d.]+\)$/, '0.55)') : 'rgba(0,0,0,0.45)'
+                ctx.strokeStyle = rimColor; ctx.lineWidth = faceH * 0.009
+                ctx.beginPath(); ctx.arc(eye.x, eye.y, holeR * 1.08, 0, Math.PI*2); ctx.stroke()
+              }
             })
+            ctx.restore()
+
+            // ── LIP RIM: character-coloured border around mouth cutout ──────
+            // Frames the real mouth — makes it look like the character's lips
+            ctx.save();
+            {
+              const lipColor: Record<string, string> = {
+                skull:  'rgba(220,210,192,0.70)', clown:  'rgba(200,0,0,0.80)',
+                devil:  'rgba(160,0,0,0.75)',     ghost:  'rgba(190,60,255,0.65)',
+                robot:  'rgba(0,200,255,0.65)',   alien:  'rgba(40,180,40,0.70)',
+                pickle: 'rgba(30,90,15,0.72)',    peanut: 'rgba(110,75,20,0.72)',
+                bear:   'rgba(50,25,10,0.65)',    cat:    'rgba(80,40,10,0.70)',
+                devil2: 'rgba(150,0,0,0.80)',
+              }
+              const lc = lipColor[char.id] ?? (char.eyeRing?.replace(/[\d.]+\)$/, '0.65)') ?? 'rgba(0,0,0,0.55)')
+              ctx.strokeStyle = lc; ctx.lineWidth = faceH * 0.014; ctx.lineCap = 'round'
+              tracePoly(ctx, landmarks, LIPS_OUTER, W, H); ctx.stroke()
+              // Outer lip shadow
+              ctx.strokeStyle = lc.replace(/[\d.]+\)$/, '0.28)'); ctx.lineWidth = faceH * 0.022
+              tracePoly(ctx, landmarks, LIPS_OUTER, W, H); ctx.stroke()
+            }
             ctx.restore()
 
             // ── Expressions: compute once, drive everything ───────────────
