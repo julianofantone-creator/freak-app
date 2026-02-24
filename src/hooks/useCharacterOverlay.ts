@@ -103,6 +103,135 @@ export const BACKGROUNDS: Background[] = [
   { id: 'forest', label: 'Forest',     emoji: '🌲' },
 ]
 
+// ─── Distortion Filters ────────────────────────────────────────────────────
+export interface DistortionFilter {
+  id: string; emoji: string; label: string
+}
+export const DISTORTION_FILTERS: DistortionFilter[] = [
+  { id: 'baby-face',  emoji: '👶', label: 'Baby Face'  },
+  { id: 'fat-face',   emoji: '🐷', label: 'Fat Face'   },
+  { id: 'slim-face',  emoji: '💃', label: 'Slim Face'  },
+  { id: 'big-eyes',   emoji: '👀', label: 'Big Eyes'   },
+  { id: 'tiny-face',  emoji: '🤏', label: 'Tiny Face'  },
+  { id: 'alien-eyes', emoji: '👽', label: 'Alien Eyes' },
+  { id: 'big-nose',   emoji: '🤡', label: 'Big Nose'   },
+]
+
+// ── Eye center helpers (cached per call) ─────────────────────────────────────
+function eyeCenter(landmarks: NormalizedLandmark[], indices: number[], W: number, H: number) {
+  let sx = 0, sy = 0
+  for (const i of indices) { const p = lm(landmarks, i, W, H); sx += p.x; sy += p.y }
+  return { x: sx / indices.length, y: sy / indices.length }
+}
+
+// ── Pixel-level face distortion (Liquify-style warp) ─────────────────────────
+function applyFaceDistortion(
+  ctx: CanvasRenderingContext2D,
+  W: number, H: number,
+  filterId: string,
+  landmarks: NormalizedLandmark[]
+) {
+  const foreheadP  = lm(landmarks, LM_FOREHEAD,    W, H)
+  const chinP      = lm(landmarks, LM_CHIN,         W, H)
+  const leftEarP   = lm(landmarks, LM_LEFT_EAR,    W, H)
+  const rightEarP  = lm(landmarks, LM_RIGHT_EAR,   W, H)
+  const noseTipP   = lm(landmarks, LM_NOSE_TIP,    W, H)
+  const faceH      = chinP.y - foreheadP.y
+  const faceW      = Math.abs(rightEarP.x - leftEarP.x)
+  const faceCX     = (leftEarP.x + rightEarP.x) / 2
+  const faceCY     = (foreheadP.y + chinP.y) / 2
+  const leftEyeC   = eyeCenter(landmarks, LEFT_EYE,  W, H)
+  const rightEyeC  = eyeCenter(landmarks, RIGHT_EYE, W, H)
+  const R          = Math.max(faceW, faceH)
+
+  interface WarpOp {
+    cx: number; cy: number; radius: number; strength: number
+    kind: 'expand' | 'shrink' | 'h-expand' | 'h-shrink'
+  }
+  const ops: WarpOp[] = []
+
+  switch (filterId) {
+    case 'baby-face':
+      ops.push({ cx: leftEyeC.x,  cy: leftEyeC.y,  radius: faceH*0.24, strength: 0.70, kind: 'expand' })
+      ops.push({ cx: rightEyeC.x, cy: rightEyeC.y, radius: faceH*0.24, strength: 0.70, kind: 'expand' })
+      ops.push({ cx: noseTipP.x,  cy: noseTipP.y,  radius: faceH*0.20, strength: 0.50, kind: 'shrink' })
+      ops.push({ cx: leftEarP.x  + faceW*0.22, cy: faceCY + faceH*0.08, radius: faceH*0.28, strength: 0.28, kind: 'expand' })
+      ops.push({ cx: rightEarP.x - faceW*0.22, cy: faceCY + faceH*0.08, radius: faceH*0.28, strength: 0.28, kind: 'expand' })
+      break
+    case 'fat-face':
+      ops.push({ cx: faceCX, cy: faceCY, radius: R * 0.70, strength: 0.50, kind: 'h-expand' })
+      break
+    case 'slim-face':
+      ops.push({ cx: faceCX, cy: faceCY, radius: R * 0.70, strength: 0.42, kind: 'h-shrink' })
+      break
+    case 'big-eyes':
+      ops.push({ cx: leftEyeC.x,  cy: leftEyeC.y,  radius: faceH*0.32, strength: 0.90, kind: 'expand' })
+      ops.push({ cx: rightEyeC.x, cy: rightEyeC.y, radius: faceH*0.32, strength: 0.90, kind: 'expand' })
+      break
+    case 'tiny-face':
+      ops.push({ cx: faceCX, cy: faceCY - faceH*0.05, radius: R * 0.60, strength: 0.48, kind: 'shrink' })
+      break
+    case 'alien-eyes':
+      ops.push({ cx: leftEyeC.x,  cy: leftEyeC.y,  radius: faceH*0.22, strength: 0.55, kind: 'expand' })
+      ops.push({ cx: rightEyeC.x, cy: rightEyeC.y, radius: faceH*0.22, strength: 0.55, kind: 'expand' })
+      // Expand forehead up (elongate skull)
+      ops.push({ cx: faceCX, cy: foreheadP.y - faceH*0.10, radius: faceH*0.40, strength: 0.30, kind: 'expand' })
+      // Shrink lower face (narrow jaw)
+      ops.push({ cx: faceCX, cy: chinP.y, radius: faceH*0.35, strength: 0.35, kind: 'h-shrink' })
+      break
+    case 'big-nose':
+      ops.push({ cx: noseTipP.x, cy: noseTipP.y + faceH*0.02, radius: faceH*0.24, strength: 0.70, kind: 'expand' })
+      break
+  }
+
+  if (ops.length === 0) return
+
+  const imgData = ctx.getImageData(0, 0, W, H)
+  const src = imgData.data
+  const dst = new Uint8ClampedArray(src.length)
+
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      let dispX = 0, dispY = 0
+
+      for (const op of ops) {
+        const dx = x - op.cx
+        const dy = y - op.cy
+        const r2 = dx*dx + dy*dy
+        const rr = op.radius * op.radius
+        if (r2 >= rr || r2 < 0.01) continue
+        const r = Math.sqrt(r2)
+        const falloff = 1 - r / op.radius
+        const t = falloff * falloff * op.strength
+        switch (op.kind) {
+          case 'expand':   dispX -= dx * t; dispY -= dy * t; break   // source closer → region appears bigger
+          case 'shrink':   dispX += dx * t; dispY += dy * t; break   // source farther → region appears smaller
+          case 'h-expand': dispX -= dx * t;                   break   // horizontal only expand (fat)
+          case 'h-shrink': dispX += dx * t;                   break   // horizontal only shrink (slim)
+        }
+      }
+
+      const srcX = Math.max(0, Math.min(W - 2, x + dispX))
+      const srcY = Math.max(0, Math.min(H - 2, y + dispY))
+      // Bilinear interpolation
+      const fx = srcX | 0, fy = srcY | 0
+      const wx = srcX - fx, wy = srcY - fy
+      const i00 = (fy * W + fx) * 4
+      const i10 = (fy * W + Math.min(fx + 1, W - 1)) * 4
+      const i01 = (Math.min(fy + 1, H - 1) * W + fx) * 4
+      const i11 = (Math.min(fy + 1, H - 1) * W + Math.min(fx + 1, W - 1)) * 4
+      const di  = (y * W + x) * 4
+      const w00 = (1-wx)*(1-wy), w10 = wx*(1-wy), w01 = (1-wx)*wy, w11 = wx*wy
+      dst[di]   = src[i00]*w00 + src[i10]*w10 + src[i01]*w01 + src[i11]*w11
+      dst[di+1] = src[i00+1]*w00 + src[i10+1]*w10 + src[i01+1]*w01 + src[i11+1]*w11
+      dst[di+2] = src[i00+2]*w00 + src[i10+2]*w10 + src[i01+2]*w01 + src[i11+2]*w11
+      dst[di+3] = src[i00+3]*w00 + src[i10+3]*w10 + src[i01+3]*w01 + src[i11+3]*w11
+    }
+  }
+
+  ctx.putImageData(new ImageData(dst, W, H), 0, 0)
+}
+
 // Precomputed star positions (stable — no flicker)
 const STARS = Array.from({ length: 200 }, () => ({
   x: Math.random(), y: Math.random(),
@@ -1079,6 +1208,7 @@ export function useCharacterOverlay({ localStream, displayCanvasRef, remoteVideo
   const [filterReady,        setFilterReady]        = useState(false)
   const [filterError,        setFilterError]        = useState<string | null>(null)
   const [isMerging,          setIsMerging]          = useState(false)
+  const [activeDistortion,   setActiveDistortionState] = useState<string | null>(null)
 
   const canvasRef              = useRef<HTMLCanvasElement | null>(null)
   const canvasStreamRef        = useRef<MediaStream | null>(null)
@@ -1098,10 +1228,12 @@ export function useCharacterOverlay({ localStream, displayCanvasRef, remoteVideo
   const remoteLmRef            = useRef<NormalizedLandmark[] | null>(null)
   const remoteLastTRef         = useRef(0)
   const mergeInitRef           = useRef(false)
+  const activeDistortionRef    = useRef<string | null>(null)
 
-  useEffect(() => { activeCharRef.current  = activeCharacter    }, [activeCharacter])
-  useEffect(() => { activeAccRef.current   = activeAccessories  }, [activeAccessories])
-  useEffect(() => { activeBgRef.current    = activeBackground   }, [activeBackground])
+  useEffect(() => { activeCharRef.current      = activeCharacter    }, [activeCharacter])
+  useEffect(() => { activeAccRef.current       = activeAccessories  }, [activeAccessories])
+  useEffect(() => { activeBgRef.current        = activeBackground   }, [activeBackground])
+  useEffect(() => { activeDistortionRef.current = activeDistortion  }, [activeDistortion])
 
   // ── Init MediaPipe models ────────────────────────────────────────────────────
   useEffect(() => {
@@ -1305,16 +1437,24 @@ export function useCharacterOverlay({ localStream, displayCanvasRef, remoteVideo
       else if (mergeRatioRef.current > mergeTarget)
         mergeRatioRef.current = Math.max(mergeTarget, mergeRatioRef.current - 0.015)
 
-      const hasFilter = !!char || accs.length > 0
-      if (hasFilter) {
-        let landmarks: NormalizedLandmark[] | null = null
-        if (landmarkerReady.current && landmarkerRef.current) {
-          try {
-            const result = landmarkerRef.current.detectForVideo(vid, t)
-            landmarks = result.faceLandmarks[0] ?? null
-          } catch (_) {}
-        }
+      const hasFilter     = !!char || accs.length > 0
+      const hasDistortion = !!activeDistortionRef.current
 
+      // ── Shared landmark detection (distortion + character both use this) ──
+      let landmarks: NormalizedLandmark[] | null = null
+      if ((hasFilter || hasDistortion) && landmarkerReady.current && landmarkerRef.current) {
+        try {
+          const result = landmarkerRef.current.detectForVideo(vid, t)
+          landmarks = result.faceLandmarks[0] ?? null
+        } catch (_) {}
+      }
+
+      // ── Distortion filters (pixel-level warp on the drawn video frame) ────
+      if (hasDistortion && landmarks) {
+        applyFaceDistortion(ctx, W, H, activeDistortionRef.current!, landmarks)
+      }
+
+      if (hasFilter) {
         // ── Remote landmark detection for merge (max ~15fps) ───────────
         const mr = mergeRatioRef.current
         const remVid = remoteVideoRef?.current
@@ -2004,6 +2144,7 @@ export function useCharacterOverlay({ localStream, displayCanvasRef, remoteVideo
     setActiveAccessories(prev => prev.includes(id) ? prev.filter(a => a !== id) : [...prev, id]), [])
   const clearAccessories    = useCallback(() => setActiveAccessories([]), [])
   const selectBackground    = useCallback((id: string) => setActiveBackground(id), [])
+  const setDistortionFilter = useCallback((id: string | null) => setActiveDistortionState(id), [])
 
   // ── Face Merge callbacks ─────────────────────────────────────────────────────
   const startMerge = useCallback(async () => {
@@ -2064,5 +2205,7 @@ export function useCharacterOverlay({ localStream, displayCanvasRef, remoteVideo
     CHARACTERS,
     // Face Merge
     isMerging, startMerge, stopMerge,
+    // Distortion filters
+    activeDistortion, setDistortionFilter,
   }
 }

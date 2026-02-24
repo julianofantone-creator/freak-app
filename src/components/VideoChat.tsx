@@ -69,6 +69,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
     activeCharacter, selectCharacter,
     activeAccessories, toggleAccessory, clearAccessories,
     activeBackground, selectBackground,
+    activeDistortion, setDistortionFilter,
     getCanvasVideoTrack,
     filterReady, filterError,
     isMerging, startMerge, stopMerge,
@@ -183,7 +184,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
   // active so the remote peer sees the filtered video.
   useEffect(() => {
     if (!localStream) return
-    const hasFilter = !!activeCharacter || activeAccessories.length > 0 || activeBackground !== 'none'
+    const hasFilter = !!activeCharacter || activeAccessories.length > 0 || activeBackground !== 'none' || !!activeDistortion
     if (hasFilter) {
       const canvasTrack = getCanvasVideoTrack()
       if (canvasTrack) replaceVideoTrack(canvasTrack)
@@ -191,7 +192,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
       replaceVideoTrack(null)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCharacter, activeAccessories, activeBackground, localStream, getCanvasVideoTrack, replaceVideoTrack])
+  }, [activeCharacter, activeAccessories, activeBackground, activeDistortion, localStream, getCanvasVideoTrack, replaceVideoTrack])
 
   // Mutual crush detection in date mode (both liked each other → celebrate)
   useEffect(() => {
@@ -433,13 +434,13 @@ const VideoChat: React.FC<VideoChatProps> = ({
                   onClick={async () => { await initMedia(); setShowCharacterPicker(true) }}
                   whileTap={{ scale: 0.88 }}
                   className={`absolute bottom-3 right-3 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold shadow-lg ${
-                    (activeCharacter || activeAccessories.length > 0 || activeBackground !== 'none')
+                    (activeCharacter || activeAccessories.length > 0 || activeBackground !== 'none' || activeDistortion)
                       ? 'bg-freak-pink text-white'
                       : 'bg-black/60 backdrop-blur-sm text-white border border-white/20'
                   }`}
                 >
                   <Sparkles className="w-3.5 h-3.5" />
-                  {activeCharacter ? activeCharacter.label : activeBackground !== 'none' ? '🌆 BG' : 'Filters'}
+                  {activeCharacter ? activeCharacter.label : activeDistortion ? '✨ Warp' : activeBackground !== 'none' ? '🌆 BG' : 'Filters'}
                 </motion.button>
 
                 {/* Your name badge */}
@@ -448,10 +449,10 @@ const VideoChat: React.FC<VideoChatProps> = ({
                 </div>
 
                 {/* Active filter badge */}
-                {(activeCharacter || activeAccessories.length > 0 || activeBackground !== 'none') && (
+                {(activeCharacter || activeAccessories.length > 0 || activeBackground !== 'none' || activeDistortion) && (
                   <div className="absolute top-2.5 right-2.5 bg-freak-pink/90 px-2 py-0.5 rounded-full">
                     <span className="text-white text-xs font-bold">
-                      {activeCharacter ? activeCharacter.emoji : activeBackground !== 'none' ? '🌆' : `+${activeAccessories.length}`}
+                      {activeCharacter ? activeCharacter.emoji : activeDistortion ? '✨' : activeBackground !== 'none' ? '🌆' : `+${activeAccessories.length}`}
                     </span>
                   </div>
                 )}
@@ -728,14 +729,17 @@ const VideoChat: React.FC<VideoChatProps> = ({
           <motion.button
             onClick={async () => { await initMedia(); setShowCharacterPicker(true) }}
             whileTap={{ scale: 0.9 }}
-            className={`w-11 h-11 rounded-full flex items-center justify-center relative ${(activeCharacter || activeAccessories.length > 0 || activeBackground !== 'none') ? 'bg-freak-pink shadow-pink' : 'bg-freak-surface border border-freak-border'}`}
+            className={`w-11 h-11 rounded-full flex items-center justify-center relative ${(activeCharacter || activeAccessories.length > 0 || activeBackground !== 'none' || activeDistortion) ? 'bg-freak-pink shadow-pink' : 'bg-freak-surface border border-freak-border'}`}
             title="Face Masks"
           >
             <Sparkles className="w-5 h-5 text-white" />
             {activeCharacter && (
               <span className="absolute -top-1 -right-1 text-sm">{activeCharacter.emoji}</span>
             )}
-            {!activeCharacter && activeAccessories.length > 0 && (
+            {!activeCharacter && activeDistortion && (
+              <span className="absolute -top-1 -right-1 text-sm">✨</span>
+            )}
+            {!activeCharacter && !activeDistortion && activeAccessories.length > 0 && (
               <span className="absolute -top-1 -right-1 w-4 h-4 bg-white rounded-full flex items-center justify-center text-[9px] font-bold text-freak-pink">
                 {activeAccessories.length}
               </span>
@@ -776,10 +780,12 @@ const VideoChat: React.FC<VideoChatProps> = ({
             activeCharacter={activeCharacter}
             activeAccessories={activeAccessories}
             activeBackground={activeBackground}
+            activeDistortion={activeDistortion}
             onSelect={selectCharacter}
             onToggleAccessory={toggleAccessory}
             onClearAccessories={clearAccessories}
             onSelectBackground={selectBackground}
+            onSelectDistortion={setDistortionFilter}
             onClose={() => setShowCharacterPicker(false)}
             filterReady={filterReady}
             filterError={filterError}

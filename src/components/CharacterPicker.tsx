@@ -5,16 +5,19 @@ import {
   Character, CHARACTERS,
   Accessory, ACCESSORIES, ACCESSORY_CATEGORIES, AccessoryCategory,
   Background, BACKGROUNDS,
+  DistortionFilter, DISTORTION_FILTERS,
 } from '../hooks/useCharacterOverlay'
 
 interface CharacterPickerProps {
   activeCharacter: Character | null
   activeAccessories: string[]
   activeBackground: string
+  activeDistortion: string | null
   onSelect: (char: Character | null) => void
   onToggleAccessory: (id: string) => void
   onClearAccessories: () => void
   onSelectBackground: (id: string) => void
+  onSelectDistortion: (id: string | null) => void
   onClose: () => void
   filterReady?: boolean
   filterError?: string | null
@@ -24,15 +27,17 @@ export default function CharacterPicker({
   activeCharacter,
   activeAccessories,
   activeBackground,
+  activeDistortion,
   onSelect,
   onToggleAccessory,
   onClearAccessories,
   onSelectBackground,
+  onSelectDistortion,
   onClose,
   filterReady = false,
   filterError = null,
 }: CharacterPickerProps) {
-  const [tab, setTab] = useState<'characters' | 'accessories' | 'backgrounds'>('characters')
+  const [tab, setTab] = useState<'characters' | 'accessories' | 'backgrounds' | 'warp'>('characters')
   const [accCat, setAccCat] = useState<AccessoryCategory>('head')
 
   const filteredAccessories = ACCESSORIES.filter(a => a.category === accCat)
@@ -67,6 +72,7 @@ export default function CharacterPicker({
               { id: 'characters'  as const, label: '🎭 Characters' },
               { id: 'accessories' as const, label: `🪖 Fits${activeAccessories.length > 0 ? ` (${activeAccessories.length})` : ''}` },
               { id: 'backgrounds' as const, label: `🌆 Backgrounds${activeBackground !== 'none' ? ' ●' : ''}` },
+              { id: 'warp'        as const, label: `✨ Warp${activeDistortion ? ' ●' : ''}` },
             ].map(t => (
               <button
                 key={t.id}
@@ -302,6 +308,70 @@ export default function CharacterPicker({
                 <p className="text-freak-muted text-xs leading-relaxed">
                   Peanut character + Space background = you're an actual peanut floating in space. That clip goes viral.{' '}
                   <span className="text-freak-pink">Stack everything.</span>
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* ── Warp tab ───────────────────────────────────────────────────── */}
+          {tab === 'warp' && (
+            <div className="space-y-4">
+              <div>
+                <p className="text-freak-muted text-xs uppercase tracking-wider mb-1">Face Warp</p>
+                <p className="text-freak-muted text-[11px] mb-3">Snapchat-style distortion. Warps your actual face pixels in real-time.</p>
+              </div>
+
+              {/* None / off option */}
+              <motion.button
+                onClick={() => { onSelectDistortion(null); onClose() }}
+                className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl border transition-colors ${
+                  !activeDistortion
+                    ? 'border-freak-pink bg-freak-pink/10'
+                    : 'border-freak-border bg-freak-surface hover:border-freak-pink/50'
+                }`}
+                whileTap={{ scale: 0.97 }}
+              >
+                <div className="w-12 h-12 rounded-full bg-freak-border flex items-center justify-center text-xl">🚫</div>
+                <div className="text-left">
+                  <p className={`font-semibold text-sm ${!activeDistortion ? 'text-freak-pink' : 'text-white'}`}>No Warp</p>
+                  <p className="text-freak-muted text-xs">Normal face</p>
+                </div>
+                {!activeDistortion && <div className="ml-auto w-2 h-2 rounded-full bg-freak-pink" />}
+              </motion.button>
+
+              {/* Warp grid */}
+              <div className="grid grid-cols-3 gap-2.5">
+                {(DISTORTION_FILTERS as DistortionFilter[]).map((df) => {
+                  const isActive = activeDistortion === df.id
+                  return (
+                    <motion.button
+                      key={df.id}
+                      onClick={() => { onSelectDistortion(isActive ? null : df.id); onClose() }}
+                      className={`flex flex-col items-center gap-2 p-4 rounded-2xl border transition-colors ${
+                        isActive
+                          ? 'border-freak-pink bg-freak-pink/15'
+                          : 'border-freak-border bg-freak-surface hover:border-freak-pink/40'
+                      }`}
+                      whileHover={{ scale: 1.04 }}
+                      whileTap={{ scale: 0.92 }}
+                    >
+                      <span className="text-4xl">{df.emoji}</span>
+                      <span className={`text-[11px] font-semibold text-center leading-tight ${isActive ? 'text-freak-pink' : 'text-freak-muted'}`}>
+                        {df.label}
+                      </span>
+                      {isActive && <div className="w-1.5 h-1.5 rounded-full bg-freak-pink" />}
+                    </motion.button>
+                  )
+                })}
+              </div>
+
+              {/* Stackable info */}
+              <div className="bg-freak-surface border border-freak-border rounded-2xl p-4">
+                <p className="text-white text-xs font-medium mb-1">🔗 Stackable</p>
+                <p className="text-freak-muted text-xs leading-relaxed">
+                  Warp filters stack on top of character overlays. Try{' '}
+                  <span className="text-freak-pink">Baby Face + Clown</span> or{' '}
+                  <span className="text-freak-pink">Fat Face + Peanut</span> for maximum chaos.
                 </p>
               </div>
             </div>
