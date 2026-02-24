@@ -40,8 +40,10 @@ export const CHARACTERS: Character[] = [
   { id: 'cat',     emoji: '🐱', label: 'Cat',     skin: 'rgba(200,180,150,0.95)', eyeRing: '#795548' },
   { id: 'devil',   emoji: '😈', label: 'Devil',   skin: 'rgba(180,30,30,0.95)',   eyeRing: '#880000' },
   { id: 'cowboy',  emoji: '🤠', label: 'Cowboy',  skin: 'rgba(210,160,100,0.95)', eyeRing: '#5d4037' },
-  { id: 'dragon',  emoji: '🐉', label: 'Dragon',  skin: 'rgba(100,50,150,0.95)',  eyeRing: '#ff9800' },
-  { id: 'fire',    emoji: '🔥', label: 'Fire',    skin: 'rgba(255,100,0,0.92)',   eyeRing: '#ffcc00' },
+  { id: 'dragon',    emoji: '🐉', label: 'Dragon',     skin: 'rgba(100,50,150,0.95)',   eyeRing: '#ff9800' },
+  { id: 'fire',      emoji: '🔥', label: 'Fire',       skin: 'rgba(255,100,0,0.92)',    eyeRing: '#ffcc00' },
+  { id: 'anime',     emoji: '✨', label: 'Anime',      skin: 'rgba(255,225,200,0.97)',  eyeRing: '#ff88bb', cheek: 'rgba(255,160,180,0.55)' },
+  { id: 'neon-skull',emoji: '💜', label: 'Neon Skull', skin: 'rgba(235,225,255,0.97)', eyeRing: '#cc00ff' },
 ]
 
 // ─── Accessories ─────────────────────────────────────────────────────────────
@@ -882,6 +884,94 @@ function drawSurpriseEffect(
   ctx.restore()
 }
 
+// ─── Particle system ──────────────────────────────────────────────────────────
+interface Particle {
+  x: number; y: number; vx: number; vy: number
+  born: number; duration: number
+  r: number; h: number; s: number; l: number
+  type: 'fire'|'smoke'|'sparkle'|'heart'|'energy'|'petal'
+}
+
+function spawnParticles(
+  pool: Particle[], cx: number, cy: number, count: number,
+  type: Particle['type'], now: number, spread: number, baseAngle: number,
+  speed: number, h: number, s: number, l: number, r: number, duration: number
+) {
+  for (let i = 0; i < count; i++) {
+    const ang = baseAngle + (Math.random() - 0.5) * spread
+    const spd = speed * (0.55 + Math.random() * 0.9)
+    pool.push({
+      x: cx + (Math.random() - 0.5) * r * 2,
+      y: cy + (Math.random() - 0.5) * r,
+      vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
+      born: now, duration: duration * (0.55 + Math.random() * 0.9),
+      r: r * (0.45 + Math.random() * 1.1),
+      h: h + (Math.random() - 0.5) * 18, s, l,
+      type,
+    })
+  }
+}
+
+function updateAndDrawParticles(pool: Particle[], ctx: CanvasRenderingContext2D, now: number) {
+  for (let i = pool.length - 1; i >= 0; i--) {
+    if (now - pool[i].born >= pool[i].duration) { pool.splice(i, 1); continue }
+  }
+  for (const p of pool) {
+    const frac  = Math.min(1, (now - p.born) / p.duration)
+    const alpha = (1 - frac * frac)
+    p.x += p.vx; p.y += p.vy
+    ctx.save()
+    switch (p.type) {
+      case 'fire': {
+        p.vy *= 0.968; p.vx *= 0.985
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r * (1 + frac * 0.7), 0, Math.PI*2)
+        ctx.fillStyle = `hsla(${p.h + frac*28},${p.s}%,${p.l + frac*22}%,${alpha * 0.88})`
+        ctx.fill(); break
+      }
+      case 'smoke': {
+        p.vy *= 0.982; p.vx += (Math.random()-0.5)*0.25
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r * (1 + frac * 2.8), 0, Math.PI*2)
+        ctx.fillStyle = `hsla(${p.h},${p.s}%,${p.l}%,${alpha * 0.28})`
+        ctx.fill(); break
+      }
+      case 'sparkle': {
+        ctx.translate(p.x, p.y); ctx.rotate(frac * Math.PI * 3)
+        ctx.fillStyle = `hsla(${p.h},${p.s}%,${p.l}%,${alpha})`
+        const sz = p.r * (1.1 - frac * 0.4)
+        ctx.beginPath()
+        for (let k = 0; k < 4; k++) {
+          const a1 = k * Math.PI/2, a2 = a1 + Math.PI/4
+          ctx.lineTo(Math.cos(a1)*sz, Math.sin(a1)*sz)
+          ctx.lineTo(Math.cos(a2)*sz*0.32, Math.sin(a2)*sz*0.32)
+        }
+        ctx.closePath(); ctx.fill(); break
+      }
+      case 'heart': {
+        p.vy *= 0.988
+        ctx.font = `${p.r * 2.2}px serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'
+        ctx.globalAlpha = alpha
+        ctx.fillStyle = `hsl(${p.h},${p.s}%,${p.l}%)`
+        ctx.fillText('♥', p.x, p.y); break
+      }
+      case 'energy': {
+        p.vy *= 0.960; p.vx *= 0.960
+        ctx.shadowBlur = p.r * 3.5; ctx.shadowColor = `hsl(${p.h},100%,72%)`
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.r * (1 - frac * 0.25), 0, Math.PI*2)
+        ctx.fillStyle = `hsla(${p.h},${p.s}%,${p.l}%,${alpha * 0.85})`
+        ctx.fill(); ctx.shadowBlur = 0; break
+      }
+      case 'petal': {
+        p.vy *= 0.980; p.vx += Math.sin(now * 0.003 + p.born * 0.001) * 0.14
+        ctx.translate(p.x, p.y); ctx.rotate(frac * Math.PI * 1.8)
+        ctx.fillStyle = `hsla(${p.h},${p.s}%,${p.l}%,${alpha * 0.82})`
+        ctx.beginPath(); ctx.ellipse(0, 0, p.r * 1.3, p.r * 0.55, 0, 0, Math.PI*2)
+        ctx.fill(); break
+      }
+    }
+    ctx.restore()
+  }
+}
+
 // ─── Eyebrow landmarks ────────────────────────────────────────────────────────
 const BROW_RIGHT = [70, 63, 105, 66, 107]   // outer → inner
 const BROW_LEFT  = [336, 296, 334, 293, 300]
@@ -1103,6 +1193,7 @@ export function useCharacterOverlay({ localStream, displayCanvasRef, remoteVideo
     canvasRef.current = canvas
     canvasStreamRef.current = canvas.captureStream(30)
     const ctx = canvas.getContext('2d')!
+    const particlePool: Particle[] = []  // lives for duration of this stream session
 
     const maskCanvas = document.createElement('canvas')
     maskCanvas.width = 1280; maskCanvas.height = 720
@@ -1190,6 +1281,23 @@ export function useCharacterOverlay({ localStream, displayCanvasRef, remoteVideo
       // ── Character + accessories on top of video/bg ────────────────────
       // Landmarks detection is OPTIONAL — if FaceLandmarker failed to load we
       // still show the fallback tint + emoji so the user knows the filter is ON.
+      // ── Scene color grading — character tints the whole frame ────────────
+      if (char) {
+        const sceneTints: Record<string,string> = {
+          devil:       'rgba(55,0,0,0.09)',
+          'neon-skull':'rgba(35,0,55,0.10)',
+          ghost:       'rgba(18,0,35,0.10)',
+          skull:       'rgba(12,12,12,0.08)',
+          robot:       'rgba(0,18,28,0.10)',
+          alien:       'rgba(0,28,0,0.09)',
+          dragon:      'rgba(30,0,45,0.10)',
+          fire:        'rgba(45,8,0,0.09)',
+          anime:       'rgba(255,220,230,0.05)',
+        }
+        const st = sceneTints[char.id]
+        if (st) { ctx.fillStyle = st; ctx.fillRect(0, 0, W, H) }
+      }
+
       // ── Face Merge: animate ratio + detect remote landmarks ─────────────
       const mergeTarget = isMergingRef.current ? 0.5 : 0
       if (mergeRatioRef.current < mergeTarget)
@@ -1290,11 +1398,13 @@ export function useCharacterOverlay({ localStream, displayCanvasRef, remoteVideo
               expandPoly(mctx as unknown as CanvasRenderingContext2D, landmarks, RIGHT_EYE, W, H, expand); mctx.fill()
             }
 
-            // Punch eye + mouth cutouts — LARGER so real eyes/mouth clearly show through
+            // Punch eye + mouth cutouts — larger for anime, standard for others
+            const eyeExpand  = char.id === 'anime' ? faceH * 0.072 : faceH * 0.038
+            const mouthExpand = char.id === 'anime' ? faceH * 0.032 : faceH * 0.028
             mctx.globalCompositeOperation = 'destination-out'
-            expandPoly(mctx as unknown as CanvasRenderingContext2D, landmarks, LEFT_EYE,   W, H, faceH * 0.038); mctx.fill()
-            expandPoly(mctx as unknown as CanvasRenderingContext2D, landmarks, RIGHT_EYE,  W, H, faceH * 0.038); mctx.fill()
-            expandPoly(mctx as unknown as CanvasRenderingContext2D, landmarks, LIPS_OUTER, W, H, faceH * 0.028); mctx.fill()
+            expandPoly(mctx as unknown as CanvasRenderingContext2D, landmarks, LEFT_EYE,   W, H, eyeExpand); mctx.fill()
+            expandPoly(mctx as unknown as CanvasRenderingContext2D, landmarks, RIGHT_EYE,  W, H, eyeExpand); mctx.fill()
+            expandPoly(mctx as unknown as CanvasRenderingContext2D, landmarks, LIPS_OUTER, W, H, mouthExpand); mctx.fill()
 
             // ── Enhanced 3D shading ───────────────────────────────────────────
             mctx.globalCompositeOperation = 'source-atop'
@@ -1402,10 +1512,8 @@ export function useCharacterOverlay({ localStream, displayCanvasRef, remoteVideo
             const rightEyeCenter = { x: lm(landmarks,160,W,H).x * 0.5 + lm(landmarks,159,W,H).x * 0.5,
                                       y: lm(landmarks,160,W,H).y * 0.5 + lm(landmarks,159,W,H).y * 0.5 }
             // ── HYPER-REALISTIC EYE SOCKET SYSTEM ─────────────────────────
-            // The key to looking like you ARE the character (not wearing a mask)
-            // is the socket depth gradient — real eye appears inside a recessed cavity
-            const eyeR    = faceH * 0.065
-            const holeR   = faceH * 0.042   // approx size of the eye cutout
+            const eyeR    = char.id === 'anime' ? faceH * 0.095 : faceH * 0.065
+            const holeR   = char.id === 'anime' ? faceH * 0.072 : faceH * 0.042
             ctx.save()
             ;[leftEyeCenter, rightEyeCenter].forEach((eye, eyeIdx) => {
               const isLeft = eyeIdx === 0
@@ -1465,6 +1573,44 @@ export function useCharacterOverlay({ localStream, displayCanvasRef, remoteVideo
 
               // ── 2. CHARACTER SOCKET RIM — the precise frame around the hole ─
               switch (char.id) {
+                case 'anime': {
+                  // MASSIVE anime eyes — the whole style is defined by huge shiny eyes
+                  const aEyeR = eyeR * 1.65
+                  // White sclera
+                  ctx.fillStyle = 'rgba(255,252,255,0.94)'
+                  ctx.beginPath(); ctx.arc(eye.x, eye.y, aEyeR, 0, Math.PI*2); ctx.fill()
+                  // Pink rim
+                  ctx.strokeStyle = '#ff88bb'; ctx.lineWidth = faceH*0.018; ctx.stroke()
+                  // Iris gradient (real eye shows in center)
+                  const aiG = ctx.createRadialGradient(eye.x, eye.y, holeR*0.75, eye.x, eye.y, aEyeR*0.88)
+                  aiG.addColorStop(0, 'transparent'); aiG.addColorStop(0.5, 'rgba(255,100,160,0.30)'); aiG.addColorStop(1, 'rgba(200,60,130,0.55)')
+                  ctx.fillStyle = aiG; ctx.beginPath(); ctx.arc(eye.x, eye.y, aEyeR*0.88, 0, Math.PI*2); ctx.fill()
+                  // Top eyelid — thick dark
+                  ctx.strokeStyle = '#1a0010'; ctx.lineWidth = faceH*0.028; ctx.lineCap = 'round'
+                  ctx.beginPath(); ctx.arc(eye.x, eye.y, aEyeR, Math.PI*1.1, Math.PI*1.9); ctx.stroke()
+                  // Lower lash line
+                  ctx.strokeStyle = '#3d0020'; ctx.lineWidth = faceH*0.010
+                  ctx.beginPath(); ctx.arc(eye.x, eye.y, aEyeR, Math.PI*0.05, Math.PI*0.95); ctx.stroke()
+                  // Large white sparkle reflection (top-left)
+                  ctx.fillStyle = 'rgba(255,255,255,0.95)'
+                  ctx.beginPath(); ctx.ellipse(eye.x - aEyeR*0.38, eye.y - aEyeR*0.38, aEyeR*0.28, aEyeR*0.18, -0.4, 0, Math.PI*2); ctx.fill()
+                  // Small secondary sparkle
+                  ctx.beginPath(); ctx.arc(eye.x + aEyeR*0.28, eye.y - aEyeR*0.5, aEyeR*0.12, 0, Math.PI*2); ctx.fill()
+                  break
+                }
+                case 'neon-skull': {
+                  // Neon purple death sockets
+                  const nsFlicker = 0.80 + 0.20 * Math.sin(t * 0.009 + eyeIdx * 2.1)
+                  ctx.strokeStyle = `rgba(200,0,255,${0.88 * nsFlicker})`; ctx.lineWidth = faceH*0.016
+                  ctx.shadowBlur = 16; ctx.shadowColor = `rgba(200,0,255,${0.7 * nsFlicker})`
+                  ctx.beginPath(); ctx.ellipse(eye.x, eye.y + eyeR*0.05, eyeR*1.10, eyeR*0.95, 0, 0, Math.PI*2); ctx.stroke()
+                  ctx.beginPath(); ctx.ellipse(eye.x, eye.y + eyeR*0.05, eyeR*1.32, eyeR*1.14, 0, 0, Math.PI*2); ctx.stroke()
+                  ctx.shadowBlur = 0
+                  const nvg = ctx.createRadialGradient(eye.x, eye.y, 0, eye.x, eye.y, eyeR)
+                  nvg.addColorStop(0, `rgba(80,0,120,${0.55*nsFlicker})`); nvg.addColorStop(1, 'transparent')
+                  ctx.fillStyle = nvg; ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR, 0, Math.PI*2); ctx.fill()
+                  break
+                }
                 case 'skull': {
                   // Bone orbital socket — slightly ovoid, rough inner edge
                   ctx.strokeStyle = 'rgba(200,192,178,0.85)'; ctx.lineWidth = faceH*0.016
@@ -1492,32 +1638,42 @@ export function useCharacterOverlay({ localStream, displayCanvasRef, remoteVideo
                     ctx.beginPath(); ctx.arc(bx as number, by as number, faceH*0.015, 0, Math.PI*2)
                     ctx.fillStyle = '#00b8d4'; ctx.fill()
                   })
-                  // Scan line at top
-                  ctx.strokeStyle = 'rgba(0,229,255,0.6)'; ctx.lineWidth = faceH*0.006
-                  ctx.beginPath(); ctx.moveTo(eye.x - hw*0.85, eye.y - hh*0.55); ctx.lineTo(eye.x + hw*0.85, eye.y - hh*0.55); ctx.stroke()
+                  // Animated scan line bouncing up/down
+                  const scanY = eye.y - hh + (Math.sin(t * 0.005 + eyeIdx * 1.4) * 0.5 + 0.5) * hh * 2
+                  ctx.strokeStyle = 'rgba(0,229,255,0.80)'; ctx.lineWidth = faceH*0.007
+                  ctx.shadowBlur = 5; ctx.shadowColor = 'rgba(0,229,255,0.7)'
+                  ctx.beginPath(); ctx.moveTo(eye.x - hw*0.88, scanY); ctx.lineTo(eye.x + hw*0.88, scanY); ctx.stroke()
+                  ctx.shadowBlur = 0
                   break
                 }
                 case 'devil': {
-                  // Fire socket rim — ember glow with inner flame
-                  const fg = ctx.createRadialGradient(eye.x, eye.y - eyeR*0.2, 0, eye.x, eye.y, eyeR*1.2)
-                  fg.addColorStop(0, 'rgba(255,140,0,0.45)'); fg.addColorStop(0.5, 'rgba(255,40,0,0.30)'); fg.addColorStop(1, 'transparent')
-                  ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*1.2, 0, Math.PI*2); ctx.fill()
-                  ctx.strokeStyle = '#ff3300'; ctx.lineWidth = faceH*0.018
+                  // Fire socket — ANIMATED ember flicker using t
+                  const flick  = 0.72 + 0.28 * Math.sin(t * 0.011 + eyeIdx * 1.85)
+                  const flick2 = 0.68 + 0.32 * Math.sin(t * 0.017 + eyeIdx * 1.2)
+                  const fg = ctx.createRadialGradient(eye.x, eye.y - eyeR*0.2, 0, eye.x, eye.y, eyeR*1.28)
+                  fg.addColorStop(0, `rgba(255,145,0,${0.50*flick})`); fg.addColorStop(0.45, `rgba(255,40,0,${0.35*flick})`); fg.addColorStop(1, 'transparent')
+                  ctx.fillStyle = fg; ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*1.28, 0, Math.PI*2); ctx.fill()
+                  ctx.shadowBlur = 12*flick; ctx.shadowColor = `rgba(255,60,0,${0.65*flick})`
+                  ctx.strokeStyle = `rgba(255,45,0,${0.80*flick})`; ctx.lineWidth = faceH*0.018
                   ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*1.0, 0, Math.PI*2); ctx.stroke()
-                  // Inner flame tip pointing up
-                  ctx.fillStyle = 'rgba(255,200,0,0.55)'
-                  ctx.beginPath(); ctx.ellipse(eye.x, eye.y - eyeR*0.85, eyeR*0.22, eyeR*0.42, 0, 0, Math.PI*2); ctx.fill()
+                  ctx.shadowBlur = 0
+                  const flameH = eyeR * (0.33 + 0.20 * flick2)
+                  ctx.fillStyle = `rgba(255,${Math.floor(185+flick*55)},0,${0.62*flick})`
+                  ctx.beginPath(); ctx.ellipse(eye.x, eye.y - eyeR*0.78, eyeR*0.19, flameH, 0, 0, Math.PI*2); ctx.fill()
                   break
                 }
                 case 'ghost': {
-                  // Glowing portal rings
+                  // Glowing portal rings — animated pulse
+                  const gPulse = 0.75 + 0.25 * Math.sin(t * 0.007 + eyeIdx * Math.PI)
                   ;[1.45, 1.10].forEach((r, i) => {
-                    const alpha = i === 0 ? 0.35 : 0.65
+                    const alpha = (i === 0 ? 0.32 : 0.62) * gPulse
                     ctx.strokeStyle = `rgba(210,80,255,${alpha})`; ctx.lineWidth = faceH*(i===0 ? 0.008 : 0.016)
+                    ctx.shadowBlur = i === 1 ? 8*gPulse : 0; ctx.shadowColor = `rgba(200,80,255,${0.6*gPulse})`
                     ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*r, 0, Math.PI*2); ctx.stroke()
+                    ctx.shadowBlur = 0
                   })
                   const gg = ctx.createRadialGradient(eye.x, eye.y, 0, eye.x, eye.y, eyeR*0.8)
-                  gg.addColorStop(0, 'rgba(200,100,255,0.18)'); gg.addColorStop(1, 'transparent')
+                  gg.addColorStop(0, `rgba(200,100,255,${0.20*gPulse})`); gg.addColorStop(1, 'transparent')
                   ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*0.8, 0, Math.PI*2); ctx.fill()
                   break
                 }
@@ -1713,7 +1869,76 @@ export function useCharacterOverlay({ localStream, displayCanvasRef, remoteVideo
             drawDecorations(ctx, char, landmarks, W, H)
             drawNameTag(ctx, char, landmarks, W, H)
 
+            // ── PARTICLE EMISSION ─────────────────────────────────────────
+            const mTop   = lm(landmarks, 13, W, H)
+            const mBot   = lm(landmarks, 14, W, H)
+            const mCX    = (mTop.x + mBot.x) / 2
+            const mCY    = (mTop.y + mBot.y) / 2
+            const lCorn  = lm(landmarks, 61,  W, H)
+            const rCorn  = lm(landmarks, 291, W, H)
+            const fhead  = lm(landmarks, LM_FOREHEAD, W, H)
+
+            // Fire / energy from mouth when talking
+            if (expr.mouthOpen > 0.32 && Math.random() < 0.55) {
+              const mc = Math.ceil(expr.mouthOpen * 3)
+              switch (char.id) {
+                case 'devil': case 'fire':
+                  spawnParticles(particlePool, mCX, mCY, mc, 'fire', t, Math.PI*0.55, -Math.PI/2, 4.0, 18, 95, 52, faceH*0.030, 650)
+                  if (Math.random()<0.3) spawnParticles(particlePool, mCX, mCY+faceH*0.02, mc, 'smoke', t, Math.PI*0.4, -Math.PI/2, 1.8, 0, 0, 55, faceH*0.042, 850)
+                  break
+                case 'dragon':
+                  spawnParticles(particlePool, mCX, mCY, mc, 'fire', t, Math.PI*0.65, -Math.PI/2, 4.8, 28, 100, 55, faceH*0.032, 700)
+                  break
+                case 'ghost':
+                  spawnParticles(particlePool, mCX, mCY, mc, 'energy', t, Math.PI*0.7, -Math.PI/2, 3.0, 285, 90, 72, faceH*0.025, 580)
+                  break
+                case 'robot':
+                  spawnParticles(particlePool, mCX, mCY, mc, 'energy', t, Math.PI*0.45, -Math.PI/2, 3.5, 192, 100, 62, faceH*0.020, 480)
+                  break
+                case 'skull': case 'neon-skull':
+                  if (Math.random()<0.45) spawnParticles(particlePool, mCX, mCY, mc, 'smoke', t, Math.PI*0.55, -Math.PI/2, 2.0, 270, 0, 60, faceH*0.038, 750)
+                  break
+                case 'anime':
+                  if (expr.smileRatio > 0.25) spawnParticles(particlePool, mCX, mCY-faceH*0.06, mc, 'sparkle', t, Math.PI*0.7, -Math.PI/2, 2.8, 340, 95, 78, faceH*0.022, 750)
+                  break
+              }
+            }
+
+            // Smile corner hearts
+            if (expr.smileRatio > 0.52 && Math.random() < 0.22) {
+              const heartIds = ['peanut','anime','cat','fox','bear','cowboy']
+              if (heartIds.includes(char.id)) {
+                ;[lCorn, rCorn].forEach(c => spawnParticles(particlePool, c.x, c.y, 1, 'heart', t, Math.PI*0.35, -Math.PI/2, 1.6, 345, 90, 72, faceH*0.028, 1000))
+              }
+            }
+
+            // Anime always drifts petals
+            if (char.id === 'anime' && Math.random() < 0.08) {
+              spawnParticles(particlePool, faceCX + (Math.random()-0.5)*faceW*1.5, foreheadP.y - faceH*0.2, 1, 'petal', t, Math.PI*0.4, Math.PI/8, 1.5, 340, 90, 82, faceH*0.025, 1800)
+            }
+
+            // Shock burst
+            if (expr.browRaise > 0.62 && Math.random() < 0.32) {
+              const sc = Math.ceil(expr.browRaise * 4)
+              switch (char.id) {
+                case 'devil': case 'dragon':
+                  spawnParticles(particlePool, fhead.x, fhead.y - faceH*0.18, sc, 'fire', t, Math.PI*1.4, -Math.PI/2, 3.2, 20, 98, 58, faceH*0.024, 520)
+                  break
+                case 'ghost': case 'neon-skull':
+                  spawnParticles(particlePool, fhead.x, fhead.y - faceH*0.18, sc, 'energy', t, Math.PI*1.5, -Math.PI/2, 3.8, 285, 90, 78, faceH*0.020, 480)
+                  break
+                case 'anime':
+                  spawnParticles(particlePool, fhead.x + faceW*0.6, fhead.y + faceH*0.1, 1, 'sparkle', t, 0.3, Math.PI/6, 0.8, 200, 25, 80, faceH*0.030, 1200)
+                  break
+                default:
+                  spawnParticles(particlePool, fhead.x, fhead.y - faceH*0.18, sc, 'sparkle', t, Math.PI*1.4, -Math.PI/2, 3.5, 55, 100, 82, faceH*0.022, 520)
+              }
+            }
+
             ctx.restore()  // remove perspective transform
+
+            // Draw particles OUTSIDE perspective transform (screen space)
+            updateAndDrawParticles(particlePool, ctx, t)
           }
 
           if (accs.length > 0) {
