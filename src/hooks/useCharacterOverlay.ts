@@ -349,65 +349,119 @@ function drawCharacterBody(ctx: CanvasRenderingContext2D, char: Character,
   ctx.save()
 
   if (char.id === 'peanut') {
-    // Classic 2-bump peanut shape: upper head + pinch + lower body
-    const headR  = faceW * 0.5
+    // TheBurntPeanut — classic 2-bump peanut with burnt/roasted look
+    const headR  = faceW * 0.50
     const bodyR  = faceW * 0.55
     const headCY = forehead.y + faceH * 0.35
-    const pinchY = chin.y + faceH * 0.12
-    const bodyCY = chin.y + faceH * 0.55
+    const pinchY = chin.y + faceH * 0.10
+    const bodyCY = chin.y + faceH * 0.52
 
-    // Lower body oval
-    ctx.beginPath()
-    ctx.ellipse(faceCX, bodyCY, bodyR, faceH * 0.45, 0, 0, Math.PI * 2)
+    // ── Draw each bump with burnt edge gradient ─────────────────────────
+    const drawBurntBump = (cx: number, cy: number, rx: number, ry: number) => {
+      // Base fill
+      ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI*2)
+      ctx.fillStyle = char.skin; ctx.fill()
+      // Burnt edge: dark brown vignette around perimeter
+      const bg = ctx.createRadialGradient(cx, cy, Math.min(rx,ry)*0.45, cx, cy, Math.max(rx,ry)*1.05)
+      bg.addColorStop(0, 'rgba(0,0,0,0)')
+      bg.addColorStop(0.7, 'rgba(80,30,0,0.20)')
+      bg.addColorStop(1,   'rgba(50,15,0,0.70)')
+      ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI*2)
+      ctx.fillStyle = bg; ctx.fill()
+      // Outline stroke — dark brown
+      ctx.strokeStyle = '#5c3d10'; ctx.lineWidth = Math.max(2, faceW * 0.022)
+      ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI*2); ctx.stroke()
+    }
+
+    // Lower body bump
+    drawBurntBump(faceCX, bodyCY, bodyR, faceH * 0.43)
+
+    // Pinch / waist connector
+    ctx.beginPath(); ctx.ellipse(faceCX, pinchY, faceW * 0.28, faceH * 0.16, 0, 0, Math.PI*2)
     ctx.fillStyle = char.skin; ctx.fill()
+    // Darken the waist sides
+    const wg = ctx.createLinearGradient(faceCX - faceW*0.28, 0, faceCX + faceW*0.28, 0)
+    wg.addColorStop(0, 'rgba(60,20,0,0.55)'); wg.addColorStop(0.3, 'rgba(0,0,0,0)')
+    wg.addColorStop(0.7, 'rgba(0,0,0,0)'); wg.addColorStop(1, 'rgba(60,20,0,0.55)')
+    ctx.beginPath(); ctx.ellipse(faceCX, pinchY, faceW * 0.28, faceH * 0.16, 0, 0, Math.PI*2)
+    ctx.fillStyle = wg; ctx.fill()
 
-    // Pinch connector
-    ctx.beginPath()
-    ctx.ellipse(faceCX, pinchY, faceW * 0.32, faceH * 0.18, 0, 0, Math.PI * 2)
-    ctx.fillStyle = char.skin; ctx.fill()
+    // Upper head bump (main face area)
+    drawBurntBump(faceCX, headCY, headR * 1.05, faceH * 0.54)
 
-    // Upper head oval (matches face area)
-    ctx.beginPath()
-    ctx.ellipse(faceCX, headCY, headR * 1.05, faceH * 0.55, 0, 0, Math.PI * 2)
-    ctx.fillStyle = char.skin; ctx.fill()
-
-    // Peanut texture bumps
-    ctx.fillStyle = 'rgba(0,0,0,0.12)'
-    const bumps = [
-      [0, -0.3], [-0.28, -0.1], [0.28, -0.1], [-0.2, 0.15], [0.2, 0.15],
-      [0, 0.35], [-0.28, 0.45], [0.28, 0.45], [0, 0.65],
-    ]
-    bumps.forEach(([bx, by]) => {
+    // ── Wrinkle / texture lines (peanut shell look) ──────────────────────
+    ctx.save()
+    ctx.strokeStyle = 'rgba(90,50,10,0.38)'; ctx.lineWidth = faceW * 0.018; ctx.lineCap = 'round'
+    // Horizontal curved wrinkles on upper head
+    ;[-0.22, -0.04, 0.14, 0.30].forEach(oy => {
+      const wy = headCY + oy * faceH
+      const ww = headR * Math.sqrt(Math.max(0, 1 - ((wy - headCY)/(faceH*0.54))**2)) * 0.72
       ctx.beginPath()
-      ctx.arc(faceCX + (bx as number)*faceW*0.5, headCY + (by as number)*faceH, faceW*0.065, 0, Math.PI*2)
-      ctx.fill()
+      ctx.moveTo(faceCX - ww, wy)
+      ctx.bezierCurveTo(faceCX - ww*0.3, wy - faceH*0.025, faceCX + ww*0.3, wy - faceH*0.025, faceCX + ww, wy)
+      ctx.stroke()
     })
-    // Body bumps
-    const bodyBumps = [[-0.3, 0], [0, 0], [0.3, 0], [-0.2, 0.25], [0.2, 0.25]]
-    bodyBumps.forEach(([bx, by]) => {
+    // Wrinkles on lower body
+    ;[-0.15, 0.08].forEach(oy => {
+      const wy = bodyCY + oy * faceH
       ctx.beginPath()
-      ctx.arc(faceCX + (bx as number)*faceW*0.5, bodyCY + (by as number)*faceH*0.5, faceW*0.065, 0, Math.PI*2)
-      ctx.fill()
+      ctx.moveTo(faceCX - bodyR*0.65, wy)
+      ctx.bezierCurveTo(faceCX - bodyR*0.25, wy - faceH*0.020, faceCX + bodyR*0.25, wy - faceH*0.020, faceCX + bodyR*0.65, wy)
+      ctx.stroke()
     })
+    ctx.restore()
 
   } else if (char.id === 'pickle') {
-    // Elongated cylinder pickle body
-    const bodyW = faceW * 0.52
-    const bodyTop = forehead.y - faceH * 0.15
-    const bodyH = faceH * 2.0
+    // Elongated pickle body — rounded rectangle with tapered ends
+    const bodyW = faceW * 0.54
+    const bodyTop = forehead.y - faceH * 0.22
+    const bodyH = faceH * 2.2
+    const bodyCY = bodyTop + bodyH / 2
+
+    // Main pickle body (vertical ellipse)
     ctx.beginPath()
-    ctx.ellipse(faceCX, bodyTop + bodyH/2, bodyW, bodyH/2, 0, 0, Math.PI*2)
-    ctx.fillStyle = char.skin; ctx.fill()
-    // Pickle bumps (warts)
-    ctx.fillStyle = 'rgba(0,0,0,0.15)'
-    for (let i = 0; i < 12; i++) {
-      const bx = faceCX + (Math.cos(i * 1.3) * bodyW * 0.65)
-      const by = bodyTop + (i / 12) * bodyH
-      ctx.beginPath(); ctx.arc(bx, by, faceW * 0.04, 0, Math.PI*2); ctx.fill()
+    ctx.ellipse(faceCX, bodyCY, bodyW, bodyH / 2, 0, 0, Math.PI * 2)
+    const pickleGrad = ctx.createLinearGradient(faceCX - bodyW, 0, faceCX + bodyW, 0)
+    pickleGrad.addColorStop(0,   'rgba(40,90,30,0.95)')
+    pickleGrad.addColorStop(0.3, char.skin)
+    pickleGrad.addColorStop(0.7, char.skin)
+    pickleGrad.addColorStop(1,   'rgba(40,90,30,0.95)')
+    ctx.fillStyle = pickleGrad; ctx.fill()
+
+    // Darker outline
+    ctx.strokeStyle = '#2d5a1b'; ctx.lineWidth = Math.max(2, faceW * 0.030)
+    ctx.beginPath(); ctx.ellipse(faceCX, bodyCY, bodyW, bodyH / 2, 0, 0, Math.PI * 2); ctx.stroke()
+
+    // Horizontal ridge lines (the classic pickle look)
+    ctx.strokeStyle = 'rgba(30,70,20,0.55)'; ctx.lineWidth = faceW * 0.022
+    const ridges = 9
+    for (let i = 1; i < ridges; i++) {
+      const ry = bodyTop + (bodyH * i) / ridges
+      // Clamp ridge width to ellipse edge at that y
+      const dy = Math.abs(ry - bodyCY)
+      const rw = bodyW * Math.sqrt(Math.max(0, 1 - (dy / (bodyH / 2)) ** 2)) * 0.85
+      ctx.beginPath()
+      ctx.moveTo(faceCX - rw, ry)
+      ctx.bezierCurveTo(faceCX - rw * 0.4, ry - faceH * 0.018, faceCX + rw * 0.4, ry - faceH * 0.018, faceCX + rw, ry)
+      ctx.stroke()
     }
-    // Pickle top (stem)
-    ctx.fillStyle = 'rgba(40,100,30,0.9)'
-    ctx.fillRect(faceCX - faceW*0.06, bodyTop - faceH*0.1, faceW*0.12, faceH*0.12)
+
+    // Wart bumps
+    ctx.fillStyle = 'rgba(30,80,20,0.50)'
+    const warts = [[0.2, -0.3], [-0.35, -0.1], [0.38, 0.1], [-0.2, 0.28], [0.3, 0.42], [-0.38, 0.55], [0.15, -0.55]]
+    warts.forEach(([wx, wy]) => {
+      ctx.beginPath()
+      ctx.arc(faceCX + (wx as number) * bodyW, bodyCY + (wy as number) * (bodyH/2), faceW * 0.038, 0, Math.PI * 2)
+      ctx.fill()
+    })
+
+    // Stem (top nub)
+    ctx.fillStyle = '#1a4a10'
+    ctx.beginPath()
+    ctx.ellipse(faceCX, bodyTop - faceH * 0.04, faceW * 0.10, faceH * 0.08, 0, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.fillStyle = '#2d7a1b'
+    ctx.fillRect(faceCX - faceW * 0.05, bodyTop - faceH * 0.12, faceW * 0.10, faceH * 0.10)
 
   } else if (char.id === 'alien') {
     // Elongated alien head + slender body
@@ -945,19 +999,19 @@ export function useCharacterOverlay({ localStream, displayCanvasRef }: UseCharac
             mctx.fillStyle = char.skin
             tracePoly(mctx as unknown as CanvasRenderingContext2D, landmarks, FACE_OVAL, W, H); mctx.fill()
 
-            // Eye rings
+            // Eye rings — thick character-coloured halo around each eye cutout
             if (char.eyeRing) {
-              const expand = faceH * 0.025
+              const expand = faceH * 0.055  // bigger ring = more visible
               mctx.fillStyle = char.eyeRing
               expandPoly(mctx as unknown as CanvasRenderingContext2D, landmarks, LEFT_EYE,  W, H, expand); mctx.fill()
               expandPoly(mctx as unknown as CanvasRenderingContext2D, landmarks, RIGHT_EYE, W, H, expand); mctx.fill()
             }
 
-            // Punch eye + mouth cutouts (blurred = soft edges through character skin)
+            // Punch eye + mouth cutouts — LARGER so real eyes/mouth clearly show through
             mctx.globalCompositeOperation = 'destination-out'
-            tracePoly(mctx as unknown as CanvasRenderingContext2D, landmarks, LEFT_EYE,   W, H); mctx.fill()
-            tracePoly(mctx as unknown as CanvasRenderingContext2D, landmarks, RIGHT_EYE,  W, H); mctx.fill()
-            tracePoly(mctx as unknown as CanvasRenderingContext2D, landmarks, LIPS_OUTER, W, H); mctx.fill()
+            expandPoly(mctx as unknown as CanvasRenderingContext2D, landmarks, LEFT_EYE,   W, H, faceH * 0.038); mctx.fill()
+            expandPoly(mctx as unknown as CanvasRenderingContext2D, landmarks, RIGHT_EYE,  W, H, faceH * 0.038); mctx.fill()
+            expandPoly(mctx as unknown as CanvasRenderingContext2D, landmarks, LIPS_OUTER, W, H, faceH * 0.028); mctx.fill()
 
             // ── Enhanced 3D shading ───────────────────────────────────────────
             mctx.globalCompositeOperation = 'source-atop'
@@ -1060,20 +1114,119 @@ export function useCharacterOverlay({ localStream, displayCanvasRef }: UseCharac
             ctx.restore()
 
             // ── Character eye outlines: draw cartoon eye rings over real eyes ──
-            // Makes real eyes look like character eyes instead of random human eyes
             const leftEyeCenter  = { x: lm(landmarks,385,W,H).x * 0.5 + lm(landmarks,386,W,H).x * 0.5,
                                       y: lm(landmarks,385,W,H).y * 0.5 + lm(landmarks,386,W,H).y * 0.5 }
             const rightEyeCenter = { x: lm(landmarks,160,W,H).x * 0.5 + lm(landmarks,159,W,H).x * 0.5,
                                       y: lm(landmarks,160,W,H).y * 0.5 + lm(landmarks,159,W,H).y * 0.5 }
-            const eyeOutlineR    = faceH * 0.055
+            const eyeR = faceH * 0.062
             ctx.save()
             ;[leftEyeCenter, rightEyeCenter].forEach(eye => {
-              // Outer ring in character skin color
-              ctx.beginPath()
-              ctx.arc(eye.x, eye.y, eyeOutlineR * 1.5, 0, Math.PI * 2)
-              ctx.strokeStyle = char.eyeRing ?? char.skin
-              ctx.lineWidth = faceH * 0.022
-              ctx.stroke()
+              switch (char.id) {
+                case 'skull': {
+                  // Hollow black eye sockets — dark void with crack lines
+                  const sg = ctx.createRadialGradient(eye.x, eye.y, 0, eye.x, eye.y, eyeR * 1.6)
+                  sg.addColorStop(0, 'rgba(0,0,0,0.90)'); sg.addColorStop(0.7, 'rgba(20,10,10,0.65)'); sg.addColorStop(1, 'transparent')
+                  ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR * 1.6, 0, Math.PI*2); ctx.fill()
+                  ctx.strokeStyle = '#333'; ctx.lineWidth = faceH*0.015
+                  ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR * 1.1, 0, Math.PI*2); ctx.stroke(); break
+                }
+                case 'robot': {
+                  // LED square eye — cyan glow
+                  const hw = eyeR * 1.3
+                  ctx.fillStyle = 'rgba(0,20,40,0.85)'
+                  ctx.fillRect(eye.x - hw, eye.y - hw*0.7, hw*2, hw*1.4)
+                  ctx.strokeStyle = '#00e5ff'; ctx.lineWidth = faceH*0.018
+                  ctx.strokeRect(eye.x - hw, eye.y - hw*0.7, hw*2, hw*1.4)
+                  // Inner LED dot
+                  const lg = ctx.createRadialGradient(eye.x, eye.y, 0, eye.x, eye.y, eyeR*0.5)
+                  lg.addColorStop(0, 'rgba(0,255,255,0.95)'); lg.addColorStop(1, 'rgba(0,200,255,0)')
+                  ctx.fillStyle = lg; ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*0.5, 0, Math.PI*2); ctx.fill(); break
+                }
+                case 'devil': {
+                  // Glowing ember red eyes
+                  const dg = ctx.createRadialGradient(eye.x, eye.y, 0, eye.x, eye.y, eyeR * 1.8)
+                  dg.addColorStop(0, 'rgba(255,80,0,0.9)'); dg.addColorStop(0.4, 'rgba(200,0,0,0.6)'); dg.addColorStop(1, 'transparent')
+                  ctx.fillStyle = dg; ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*1.8, 0, Math.PI*2); ctx.fill()
+                  ctx.strokeStyle = '#ff2200'; ctx.lineWidth = faceH*0.014
+                  ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR, 0, Math.PI*2); ctx.stroke(); break
+                }
+                case 'ghost': {
+                  // Purple glow rings
+                  const gg = ctx.createRadialGradient(eye.x, eye.y, 0, eye.x, eye.y, eyeR*1.8)
+                  gg.addColorStop(0, 'rgba(220,100,255,0.85)'); gg.addColorStop(0.5, 'rgba(160,0,255,0.5)'); gg.addColorStop(1, 'transparent')
+                  ctx.fillStyle = gg; ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*1.8, 0, Math.PI*2); ctx.fill(); break
+                }
+                case 'clown': {
+                  // White ring + red tear drop below
+                  ctx.strokeStyle = '#fff'; ctx.lineWidth = faceH*0.028
+                  ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*1.2, 0, Math.PI*2); ctx.stroke()
+                  // Red tear drop
+                  ctx.fillStyle = 'rgba(220,0,0,0.85)'
+                  ctx.beginPath(); ctx.ellipse(eye.x, eye.y + eyeR*1.8, eyeR*0.3, eyeR*0.55, 0, 0, Math.PI*2); ctx.fill(); break
+                }
+                case 'cat': {
+                  // Almond / cat-eye outline
+                  ctx.strokeStyle = char.eyeRing ?? '#795548'; ctx.lineWidth = faceH*0.024
+                  ctx.beginPath(); ctx.moveTo(eye.x - eyeR*1.4, eye.y)
+                  ctx.quadraticCurveTo(eye.x, eye.y - eyeR*0.9, eye.x + eyeR*1.4, eye.y)
+                  ctx.quadraticCurveTo(eye.x + eyeR*1.6, eye.y - eyeR*0.2, eye.x + eyeR*1.9, eye.y - eyeR*0.5)
+                  ctx.stroke()
+                  ctx.beginPath(); ctx.moveTo(eye.x - eyeR*1.4, eye.y)
+                  ctx.quadraticCurveTo(eye.x, eye.y + eyeR*0.8, eye.x + eyeR*1.4, eye.y); ctx.stroke(); break
+                }
+                case 'frog': {
+                  // Protruding dome eye — big circle above eyebrow
+                  const domeY = eye.y - eyeR*0.8
+                  ctx.beginPath(); ctx.arc(eye.x, domeY, eyeR*1.5, 0, Math.PI*2)
+                  ctx.fillStyle = '#4CAF50'; ctx.fill()
+                  ctx.beginPath(); ctx.arc(eye.x, domeY, eyeR*0.9, 0, Math.PI*2)
+                  ctx.fillStyle = '#fff'; ctx.fill()
+                  ctx.beginPath(); ctx.arc(eye.x, domeY, eyeR*0.45, 0, Math.PI*2)
+                  ctx.fillStyle = '#1b3a10'; ctx.fill()
+                  // Shine
+                  ctx.beginPath(); ctx.arc(eye.x - eyeR*0.25, domeY - eyeR*0.3, eyeR*0.18, 0, Math.PI*2)
+                  ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fill(); break
+                }
+                case 'alien': {
+                  // Huge black almond eye — no iris
+                  ctx.fillStyle = 'rgba(0,0,0,0.92)'
+                  ctx.beginPath(); ctx.ellipse(eye.x, eye.y, eyeR*1.7, eyeR*1.0, 0.2, 0, Math.PI*2); ctx.fill()
+                  // Subtle green reflection line
+                  ctx.strokeStyle = 'rgba(100,220,80,0.6)'; ctx.lineWidth = faceH*0.010
+                  ctx.beginPath(); ctx.ellipse(eye.x - eyeR*0.3, eye.y - eyeR*0.35, eyeR*0.8, eyeR*0.25, 0.3, 0, Math.PI); ctx.stroke(); break
+                }
+                case 'pickle': {
+                  // Round cartoon pickle eye — white sclera + green pupil
+                  ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*1.5, 0, Math.PI*2)
+                  ctx.fillStyle = '#fff'; ctx.fill()
+                  ctx.strokeStyle = '#2d5a1b'; ctx.lineWidth = faceH*0.020; ctx.stroke()
+                  ctx.beginPath(); ctx.arc(eye.x + eyeR*0.15, eye.y + eyeR*0.1, eyeR*0.65, 0, Math.PI*2)
+                  ctx.fillStyle = '#2d7a1b'; ctx.fill()
+                  ctx.beginPath(); ctx.arc(eye.x + eyeR*0.15, eye.y + eyeR*0.1, eyeR*0.28, 0, Math.PI*2)
+                  ctx.fillStyle = '#111'; ctx.fill()
+                  ctx.beginPath(); ctx.arc(eye.x - eyeR*0.1, eye.y - eyeR*0.25, eyeR*0.22, 0, Math.PI*2)
+                  ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fill(); break
+                }
+                case 'peanut': {
+                  // Warm cartoon peanut eye — tan ring, heavy top eyelid
+                  ctx.strokeStyle = '#7a5c20'; ctx.lineWidth = faceH*0.030
+                  ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*1.3, 0, Math.PI*2); ctx.stroke()
+                  // Heavy top eyelid stroke
+                  ctx.strokeStyle = '#4a3010'; ctx.lineWidth = faceH*0.022
+                  ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*1.3, Math.PI*1.15, Math.PI*1.85); ctx.stroke(); break
+                }
+                case 'bear':
+                case 'panda': {
+                  ctx.strokeStyle = char.eyeRing ?? '#333'; ctx.lineWidth = faceH*0.028
+                  ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR*1.2, 0, Math.PI*2); ctx.stroke(); break
+                }
+                default: {
+                  // Default cartoon ring
+                  ctx.strokeStyle = char.eyeRing ?? char.skin
+                  ctx.lineWidth = faceH * 0.025
+                  ctx.beginPath(); ctx.arc(eye.x, eye.y, eyeR * 1.4, 0, Math.PI*2); ctx.stroke(); break
+                }
+              }
             })
             ctx.restore()
 
