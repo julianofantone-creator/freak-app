@@ -44,6 +44,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
   const previewVideoRef = useRef<HTMLVideoElement>(null)
   const previewCanvasRef = useRef<HTMLCanvasElement>(null)
+  const inCallCanvasRef = useRef<HTMLCanvasElement>(null)
   const localStreamRef = useRef<MediaStream | null>(null)  // always-current ref for callback ref below
   const pendingCrushIdRef = useRef<string | null>(null) // tracks last crush we sent a msg to (for ack mapping)
 
@@ -73,6 +74,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
     activeDistortion, setDistortionFilter,
     getCanvasVideoTrack,
     filterReady, filterError,
+    canvasRef,
     isMerging, startMerge, stopMerge,
   } = useCharacterOverlay({
     localStream,
@@ -221,6 +223,30 @@ const VideoChat: React.FC<VideoChatProps> = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCharacter, activeAccessories, activeBackground, activeDistortion, localStream, isConnected, getCanvasVideoTrack, replaceVideoTrack])
 
+  // ── In-call filter self-view ─────────────────────────────────────────────
+  // When connected and a filter is active, copy the hook's internal canvas
+  // (canvasRef) to inCallCanvasRef every rAF frame so the local self-view
+  // shows the filtered output instead of the raw camera feed.
+  useEffect(() => {
+    if (!isConnected || !filterReady) return
+    const hasFilter = !!activeCharacter || activeAccessories.length > 0 || activeBackground !== 'none' || !!activeDistortion
+    if (!hasFilter) return
+    let rafId: number
+    const loop = () => {
+      const src = canvasRef.current
+      const dst = inCallCanvasRef.current
+      if (src && dst) {
+        if (dst.width !== src.width) dst.width = src.width
+        if (dst.height !== src.height) dst.height = src.height
+        const ctx = dst.getContext('2d')
+        if (ctx) ctx.drawImage(src, 0, 0)
+      }
+      rafId = requestAnimationFrame(loop)
+    }
+    rafId = requestAnimationFrame(loop)
+    return () => cancelAnimationFrame(rafId)
+  }, [isConnected, filterReady, activeCharacter, activeAccessories, activeBackground, activeDistortion, canvasRef])
+
   // Mutual crush detection in date mode (both liked each other → celebrate)
   useEffect(() => {
     if (incomingCrush && crushedCurrentPartner && chatMode === 'date') {
@@ -351,6 +377,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
 
             {/* ── LOCAL VIDEO (bottom on mobile / right on desktop) ── */}
             <div className="flex-1 relative bg-freak-surface min-h-0">
+              {/* Raw camera feed — always mounted so localVideoCallbackRef fires */}
               <video
                 ref={localVideoCallbackRef}
                 autoPlay
@@ -358,6 +385,15 @@ const VideoChat: React.FC<VideoChatProps> = ({
                 playsInline
                 className="w-full h-full object-cover"
                 style={{ transform: 'scaleX(-1)' }}
+              />
+              {/* Filter canvas — overlays raw video when a filter is active */}
+              <canvas
+                ref={inCallCanvasRef}
+                className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                style={{
+                  transform: 'scaleX(-1)',
+                  display: (filterReady && (!!activeCharacter || activeAccessories.length > 0 || activeBackground !== 'none' || !!activeDistortion)) ? 'block' : 'none',
+                }}
               />
               {!isVideoOn && (
                 <div className="absolute inset-0 bg-freak-surface flex items-center justify-center">
