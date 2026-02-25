@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Heart, SkipForward, Square, Video, VideoOff, Mic, MicOff, Zap, Sparkles } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -165,21 +165,24 @@ const VideoChat: React.FC<VideoChatProps> = ({
     },
   })
 
-  // Keep localStreamRef current so callback ref can always access latest stream
-  useEffect(() => { localStreamRef.current = localStream }, [localStream])
+  // Keep localStreamRef current — useLayoutEffect so it's always set
+  // before any child ref callbacks or layout effects fire in the same cycle.
+  useLayoutEffect(() => { localStreamRef.current = localStream }, [localStream])
 
-  // ── Local video srcObject (in-call + idle preview) ──────────────────────
-  useEffect(() => {
-    if (localStream) {
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = localStream
-        localVideoRef.current.play().catch(() => {})
-      }
-      if (previewVideoRef.current) {
-        previewVideoRef.current.muted = true   // React muted prop doesn't set DOM attr reliably
-        previewVideoRef.current.srcObject = localStream
-        previewVideoRef.current.play().catch(() => {})
-      }
+  // ── Local video srcObject — useLayoutEffect fires synchronously after DOM
+  // mutations (same tick as ref callbacks), so localVideoRef.current is always
+  // available when isConnected flips and the in-call video element mounts.
+  useLayoutEffect(() => {
+    if (!localStream) return
+    if (localVideoRef.current) {
+      localVideoRef.current.muted = true
+      localVideoRef.current.srcObject = localStream
+      localVideoRef.current.play().catch(() => {})
+    }
+    if (previewVideoRef.current) {
+      previewVideoRef.current.muted = true
+      previewVideoRef.current.srcObject = localStream
+      previewVideoRef.current.play().catch(() => {})
     }
   }, [localStream, isConnected])
 
