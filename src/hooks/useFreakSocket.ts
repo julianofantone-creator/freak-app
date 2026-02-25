@@ -25,10 +25,15 @@ interface UseFreakSocketOptions {
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
+  { urls: 'stun:stun2.l.google.com:19302' },
+  { urls: 'stun:stun3.l.google.com:19302' },
+  { urls: 'stun:stun4.l.google.com:19302' },
   // TURN relay — handles strict NAT, mobile carriers, firewalls
-  { urls: 'turn:openrelay.metered.ca:80',  username: 'openrelayproject', credential: 'openrelayproject' },
-  { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
-  { urls: 'turns:openrelay.metered.ca:443',username: 'openrelayproject', credential: 'openrelayproject' },
+  // TODO: replace with metered.ca API-keyed credentials for production reliability
+  { urls: 'turn:openrelay.metered.ca:80',    username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443',   username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turns:openrelay.metered.ca:443',  username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:80?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
 ]
 
 export function useFreakSocket({
@@ -47,6 +52,7 @@ export function useFreakSocket({
   const socketRef = useRef<Socket | null>(null)
   const pcRef = useRef<RTCPeerConnection | null>(null)
   const pendingCandidates = useRef<RTCIceCandidateInit[]>([])  // queue ICE until remoteDescription set
+  const isInitiatorRef = useRef(false)  // track who created the original offer (for ICE restart)
   const [isReady, setIsReady] = useState(false)
   const [serverOffline, setServerOffline] = useState(false)
   const [liveStats, setLiveStats] = useState<{ online: number; inCalls: number; searching: number } | null>(null)
@@ -104,13 +110,24 @@ export function useFreakSocket({
     }
 
     // When remote stream arrives — attach to video element and force play
+    // NOTE: ontrack fires separately for video and audio tracks. We attach srcObject
+    // on the first track only to avoid redundant play() calls (which can block on iOS).
     const remoteStream = new MediaStream()
+    let remoteStreamAttached = false
     pc.ontrack = (e) => {
       remoteStream.addTrack(e.track)
       if (remoteVideoRef.current) {
-        remoteVideoRef.current.srcObject = remoteStream
-        // Force play — autoPlay attr alone isn't enough when srcObject is set dynamically
-        remoteVideoRef.current.play().catch(() => {})
+        if (!remoteStreamAttached) {
+          remoteStreamAttached = true
+          remoteVideoRef.current.srcObject = remoteStream
+          // Force play — autoPlay attr alone isn't enough when srcObject is set dynamically
+          remoteVideoRef.current.play().catch((err) => {
+            // Autoplay blocked (common on iOS without user gesture in flight)
+            // The video element has autoPlay + playsInline which re-attempts automatically
+            console.warn('[WebRTC] remote video autoplay blocked:', err)
+          })
+        }
+        // Track added to existing stream — browser will start playing it automatically
       }
     }
 
@@ -121,10 +138,27 @@ export function useFreakSocket({
       }
     }
 
-    pc.oniceconnectionstatechange = () => {
-      if (pc.iceConnectionState === 'failed') {
-        pc.restartIce()
+    pc.oniceconnectionstatechange = async () => {
+      const state = pc.iceConnectionState
+      console.log('[WebRTC] ICE state:', state)
+      if (state === 'failed') {
+        if (isInitiatorRef.current) {
+          // Only the original offerer sends the restart offer — answerer waits
+          try {
+            const offer = await pc.createOffer({ iceRestart: true })
+            await pc.setLocalDescription(offer)
+            if (socketRef.current?.connected) {
+              socketRef.current.emit('webrtc:offer', { offer })
+              console.log('[WebRTC] ICE restart offer sent')
+            }
+          } catch (e) {
+            console.error('[ICE] restart offer failed:', e)
+          }
+        }
+        // Answerer: wait for new offer from initiator (triggered by their restart above)
       }
+      // 'disconnected' is a brief network blip — WebRTC may recover on its own within ~5s
+      // We don't act on it; 'failed' is the definitive failure state
     }
 
     pcRef.current = pc
@@ -190,6 +224,7 @@ export function useFreakSocket({
       // ── MATCH FOUND ──────────────────────────────────────────────
       socket.on('match-found', async (data: { partner: Partner; isInitiator: boolean; mode?: string }) => {
         const matchMode = (data.mode === 'date' ? 'date' : 'random') as 'random' | 'date'
+        isInitiatorRef.current = data.isInitiator  // remember role for ICE restart
         onConnectedRef.current(data.partner, matchMode)
 
         const pc = createPC()
@@ -321,14 +356,16 @@ export function useFreakSocket({
 
   const skip = useCallback(() => {
     leaveQueue()
-    setTimeout(() => {
-      onSearchingRef.current()
-      if (socketRef.current?.connected) {
-        socketRef.current.emit('join-queue', { username, mode: pendingMode.current })
-      } else {
-        pendingJoin.current = true
-      }
-    }, 300)
+    // Immediately show searching state — no 300ms delay for better UX
+    onSearchingRef.current()
+    if (socketRef.current?.connected) {
+      // Small server-side delay before re-joining so cleanup propagates to old partner
+      setTimeout(() => {
+        socketRef.current?.emit('join-queue', { username, mode: pendingMode.current })
+      }, 200)
+    } else {
+      pendingJoin.current = true
+    }
   }, [leaveQueue, username])
 
   const stop = useCallback(() => {
