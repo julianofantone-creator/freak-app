@@ -122,9 +122,7 @@ export function useFreakSocket({
     }
 
     pc.oniceconnectionstatechange = () => {
-      console.log('ICE state:', pc.iceConnectionState)
       if (pc.iceConnectionState === 'failed') {
-        console.warn('ICE failed — restarting ICE')
         pc.restartIce()
       }
     }
@@ -171,7 +169,6 @@ export function useFreakSocket({
 
       socket.on('connect', () => {
         if (cancelled) return
-        console.log('✅ Socket connected:', socket.id)
         setIsReady(true)
         setServerOffline(false)
         if (pendingJoin.current) {
@@ -193,7 +190,6 @@ export function useFreakSocket({
       // ── MATCH FOUND ──────────────────────────────────────────────
       socket.on('match-found', async (data: { partner: Partner; isInitiator: boolean; mode?: string }) => {
         const matchMode = (data.mode === 'date' ? 'date' : 'random') as 'random' | 'date'
-        console.log('🤝 Matched with:', data.partner.username, '| initiator:', data.isInitiator, '| mode:', matchMode)
         onConnectedRef.current(data.partner, matchMode)
 
         const pc = createPC()
@@ -205,7 +201,6 @@ export function useFreakSocket({
             const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true })
             await pc.setLocalDescription(offer)
             socket.emit('webrtc:offer', { offer })
-            console.log('📡 Offer sent')
           } catch (e) {
             console.error('Offer failed:', e)
           }
@@ -214,7 +209,6 @@ export function useFreakSocket({
 
       // ── RECEIVE OFFER ─────────────────────────────────────────────
       socket.on('webrtc:offer', async ({ offer }: { offer: RTCSessionDescriptionInit }) => {
-        console.log('📡 Offer received')
         const pc = pcRef.current || createPC()
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(offer))
@@ -226,7 +220,6 @@ export function useFreakSocket({
           const answer = await pc.createAnswer()
           await pc.setLocalDescription(answer)
           socket.emit('webrtc:answer', { answer })
-          console.log('📡 Answer sent')
         } catch (e) {
           console.error('Answer failed:', e)
         }
@@ -234,7 +227,6 @@ export function useFreakSocket({
 
       // ── RECEIVE ANSWER ────────────────────────────────────────────
       socket.on('webrtc:answer', async ({ answer }: { answer: RTCSessionDescriptionInit }) => {
-        console.log('📡 Answer received')
         const pc = pcRef.current
         if (pc) {
           try {
@@ -264,7 +256,6 @@ export function useFreakSocket({
 
       // ── PEER LEFT ─────────────────────────────────────────────────
       socket.on('peer-disconnected', () => {
-        console.log('👋 Partner disconnected')
         closePC()
         onDisconnectedRef.current()
       })
@@ -354,10 +345,6 @@ export function useFreakSocket({
     socketRef.current?.emit('crush-request', { username }) // notify them back
   }, [username])
 
-  const sendChatMessage = useCallback((payload: { type: string; text?: string; mediaUrl?: string }) => {
-    socketRef.current?.emit('chat-message', payload)
-  }, [])
-
   // Direct message to a crush by their username (works even if not in same call)
   const sendDirectCrushMessage = useCallback((toUsername: string, payload: { id: string; type: string; text?: string; mediaUrl?: string }) => {
     socketRef.current?.emit('crush-message', { toUsername, ...payload })
@@ -383,5 +370,5 @@ export function useFreakSocket({
     }
   }, [])
 
-  return { joinQueue, skip, stop, isReady, serverOffline, liveStats, sendCrushRequest, acceptCrushRequest, sendChatMessage, sendDirectCrushMessage, sendReadReceipt, replaceVideoTrack }
+  return { joinQueue, skip, stop, isReady, serverOffline, liveStats, sendCrushRequest, acceptCrushRequest, sendDirectCrushMessage, sendReadReceipt, replaceVideoTrack }
 }

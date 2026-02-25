@@ -76,7 +76,6 @@ const VideoChat: React.FC<VideoChatProps> = ({
     isMerging, startMerge, stopMerge,
   } = useCharacterOverlay({
     localStream,
-    videoRef: localVideoRef,
     displayCanvasRef: previewCanvasRef,
     remoteVideoRef,
   })
@@ -197,7 +196,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
       el.autoplay = true
       if (localStreamRef.current) {
         el.srcObject = localStreamRef.current
-        el.play().catch((e) => console.warn('[LocalVideo] play() rejected:', e))
+        el.play().catch(() => {})
       }
     }
   }, [])

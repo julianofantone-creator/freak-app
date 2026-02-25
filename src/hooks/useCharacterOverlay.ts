@@ -1196,7 +1196,6 @@ function drawNameTag(ctx: CanvasRenderingContext2D, char: Character,
 // ─── Main hook ────────────────────────────────────────────────────────────────
 interface UseCharacterOverlayOptions {
   localStream: MediaStream | null
-  videoRef: React.RefObject<HTMLVideoElement>
   /** Optional canvas element to blit every frame into (for live preview) */
   displayCanvasRef?: React.RefObject<HTMLCanvasElement>
   /** Remote video element — used for Face Merge */
@@ -1270,20 +1269,16 @@ export function useCharacterOverlay({ localStream, displayCanvasRef, remoteVideo
         const vision = await FilesetResolver.forVisionTasks(
           'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
         )
-        console.log('[FaceFilter] WASM loaded')
-
         // Load FaceLandmarker — GPU first, CPU fallback
         try {
           const fl = await tryCreateFaceLandmarker(vision, 'GPU')
           if (!cancelled) { landmarkerRef.current = fl; landmarkerReady.current = true }
-          console.log('[FaceFilter] FaceLandmarker ✅ GPU')
         } catch {
           try {
             const fl = await tryCreateFaceLandmarker(vision, 'CPU')
             if (!cancelled) { landmarkerRef.current = fl; landmarkerReady.current = true }
-            console.log('[FaceFilter] FaceLandmarker ✅ CPU')
           } catch (e) {
-            console.error('[FaceFilter] FaceLandmarker ❌ both delegates failed', e)
+            console.error('[FaceFilter] FaceLandmarker failed:', e)
           }
         }
 
@@ -1291,26 +1286,22 @@ export function useCharacterOverlay({ localStream, displayCanvasRef, remoteVideo
         try {
           const seg = await tryCreateSegmenter(vision, 'GPU')
           if (!cancelled) { segmenterRef.current = seg; segmenterReady.current = true }
-          console.log('[FaceFilter] Segmenter ✅ GPU')
         } catch {
           try {
             const seg = await tryCreateSegmenter(vision, 'CPU')
             if (!cancelled) { segmenterRef.current = seg; segmenterReady.current = true }
-            console.log('[FaceFilter] Segmenter ✅ CPU')
           } catch (e) {
-            console.error('[FaceFilter] Segmenter ❌ both delegates failed', e)
+            console.error('[FaceFilter] Segmenter failed:', e)
           }
         }
 
         if (!cancelled) {
-          // Ready as soon as EITHER model loads — don't block UI on both
           const anyReady = landmarkerReady.current || segmenterReady.current
           setFilterReady(anyReady)
           if (!landmarkerReady.current) setFilterError('Face tracking unavailable — characters will use emoji fallback')
-          console.log(`[FaceFilter] face=${landmarkerReady.current} seg=${segmenterReady.current}`)
         }
       } catch (e) {
-        console.error('[FaceFilter] ❌ Init failed completely', e)
+        console.error('[FaceFilter] Init failed:', e)
         if (!cancelled) setFilterError('Face filters unavailable on this device/browser')
       }
     }
@@ -2140,7 +2131,6 @@ export function useCharacterOverlay({ localStream, displayCanvasRef, remoteVideo
   }, [localStream, displayCanvasRef])
 
   const getCanvasVideoTrack = useCallback((): MediaStreamTrack | null => canvasStreamRef.current?.getVideoTracks()[0] ?? null, [])
-  const getCanvasStream     = useCallback((): MediaStream | null => canvasStreamRef.current, [])
   const selectCharacter     = useCallback((char: Character | null) => setActiveCharacter(char), [])
   const toggleAccessory     = useCallback((id: string) =>
     setActiveAccessories(prev => prev.includes(id) ? prev.filter(a => a !== id) : [...prev, id]), [])
@@ -2201,7 +2191,7 @@ export function useCharacterOverlay({ localStream, displayCanvasRef, remoteVideo
     activeCharacter, selectCharacter,
     activeAccessories, toggleAccessory, clearAccessories,
     activeBackground, selectBackground,
-    getCanvasVideoTrack, getCanvasStream,
+    getCanvasVideoTrack,
     filterReady, filterError,
     canvasRef,
     CHARACTERS,
