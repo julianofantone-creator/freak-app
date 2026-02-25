@@ -44,6 +44,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
   const previewVideoRef = useRef<HTMLVideoElement>(null)
   const previewCanvasRef = useRef<HTMLCanvasElement>(null)
+  const localStreamRef = useRef<MediaStream | null>(null)  // always-current ref for callback ref below
   const pendingCrushIdRef = useRef<string | null>(null) // tracks last crush we sent a msg to (for ack mapping)
 
   const [isConnected, setIsConnected] = useState(false)
@@ -165,10 +166,10 @@ const VideoChat: React.FC<VideoChatProps> = ({
     },
   })
 
+  // Keep localStreamRef current so callback ref can always access latest stream
+  useEffect(() => { localStreamRef.current = localStream }, [localStream])
+
   // ── Local video srcObject (in-call + idle preview) ──────────────────────
-  // isConnected is in the dep array because when connecting, the in-call
-  // localVideoRef mounts fresh — localStream hasn't changed so we need
-  // isConnected to trigger the re-run and set srcObject on the new element.
   useEffect(() => {
     if (localStream) {
       if (localVideoRef.current) {
@@ -181,6 +182,17 @@ const VideoChat: React.FC<VideoChatProps> = ({
       }
     }
   }, [localStream, isConnected])
+
+  // Callback ref for in-call local video — fires the instant the element mounts,
+  // regardless of React batching. Guarantees srcObject is set even if localStream
+  // didn't change between renders.
+  const localVideoCallbackRef = useCallback((el: HTMLVideoElement | null) => {
+    localVideoRef.current = el
+    if (el && localStreamRef.current) {
+      el.srcObject = localStreamRef.current
+      el.play().catch(() => {})
+    }
+  }, [])
 
   // ── WebRTC track swap ────────────────────────────────────────────────────
   // Replaces the outgoing video track with the canvas track when a filter is
@@ -328,7 +340,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
             {/* ── LOCAL VIDEO (bottom on mobile / right on desktop) ── */}
             <div className="flex-1 relative bg-freak-surface min-h-0">
               <video
-                ref={localVideoRef}
+                ref={localVideoCallbackRef}
                 autoPlay
                 muted
                 playsInline
