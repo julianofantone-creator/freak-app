@@ -108,13 +108,24 @@ export interface DistortionFilter {
   id: string; emoji: string; label: string
 }
 export const DISTORTION_FILTERS: DistortionFilter[] = [
-  { id: 'baby-face',  emoji: '👶', label: 'Baby Face'  },
-  { id: 'fat-face',   emoji: '🐷', label: 'Fat Face'   },
-  { id: 'slim-face',  emoji: '💃', label: 'Slim Face'  },
-  { id: 'big-eyes',   emoji: '👀', label: 'Big Eyes'   },
-  { id: 'tiny-face',  emoji: '🤏', label: 'Tiny Face'  },
-  { id: 'alien-eyes', emoji: '👽', label: 'Alien Eyes' },
-  { id: 'big-nose',   emoji: '🤡', label: 'Big Nose'   },
+  { id: 'baby-face',    emoji: '👶', label: 'Baby Face'   },
+  { id: 'fat-face',     emoji: '🐷', label: 'Fat Face'    },
+  { id: 'slim-face',    emoji: '💃', label: 'Slim Face'   },
+  { id: 'big-eyes',     emoji: '👀', label: 'Big Eyes'    },
+  { id: 'tiny-face',    emoji: '🤏', label: 'Tiny Face'   },
+  { id: 'alien-eyes',   emoji: '👽', label: 'Alien Eyes'  },
+  { id: 'big-nose',     emoji: '🤡', label: 'Big Nose'    },
+  // 🔥 New unhinged filters
+  { id: 'big-forehead', emoji: '🧠', label: 'Big Brain'   },
+  { id: 'chipmunk',     emoji: '🐹', label: 'Chipmunk'    },
+  { id: 'blowfish',     emoji: '🐡', label: 'Blowfish'    },
+  { id: 'noodle',       emoji: '🍜', label: 'Noodle'      },
+  { id: 'potato',       emoji: '🥔', label: 'Potato'      },
+  { id: 'big-mouth',    emoji: '😬', label: 'Big Mouth'   },
+  { id: 'tiny-mouth',   emoji: '🫦', label: 'Tiny Mouth'  },
+  { id: 'cyclops',      emoji: '👁️', label: 'Cyclops'    },
+  { id: 'funhouse',     emoji: '🌊', label: 'Funhouse'    },
+  { id: 'melting',      emoji: '🫠', label: 'Melting'     },
 ]
 
 // ── Eye center helpers (cached per call) ─────────────────────────────────────
@@ -146,7 +157,7 @@ function applyFaceDistortion(
 
   interface WarpOp {
     cx: number; cy: number; radius: number; strength: number
-    kind: 'expand' | 'shrink' | 'h-expand' | 'h-shrink'
+    kind: 'expand' | 'shrink' | 'h-expand' | 'h-shrink' | 'v-expand' | 'v-shrink'
   }
   const ops: WarpOp[] = []
 
@@ -182,9 +193,53 @@ function applyFaceDistortion(
     case 'big-nose':
       ops.push({ cx: noseTipP.x, cy: noseTipP.y + faceH*0.02, radius: faceH*0.24, strength: 0.70, kind: 'expand' })
       break
+    case 'big-forehead':
+      // Balloon the forehead up like someone got hit by a frying pan
+      ops.push({ cx: faceCX, cy: foreheadP.y - faceH*0.05, radius: faceH*0.55, strength: 0.65, kind: 'v-expand' })
+      // Slight h-shrink on lower face to exaggerate the big brain look
+      ops.push({ cx: faceCX, cy: chinP.y + faceH*0.08, radius: faceH*0.40, strength: 0.30, kind: 'h-shrink' })
+      break
+    case 'chipmunk':
+      // Massive cheek puffs on both sides
+      ops.push({ cx: leftEarP.x  + faceW*0.08, cy: faceCY + faceH*0.05, radius: faceH*0.38, strength: 0.72, kind: 'expand' })
+      ops.push({ cx: rightEarP.x - faceW*0.08, cy: faceCY + faceH*0.05, radius: faceH*0.38, strength: 0.72, kind: 'expand' })
+      // Tiny nose to contrast
+      ops.push({ cx: noseTipP.x, cy: noseTipP.y, radius: faceH*0.14, strength: 0.35, kind: 'shrink' })
+      break
+    case 'blowfish':
+      // Entire face inflates like a balloon — bigger and more uniform than fat-face
+      ops.push({ cx: faceCX, cy: faceCY, radius: R * 0.85, strength: 0.68, kind: 'expand' })
+      break
+    case 'noodle':
+      // Tall + thin — face stretches vertically and squishes horizontally
+      ops.push({ cx: faceCX, cy: faceCY, radius: R * 0.75, strength: 0.60, kind: 'v-expand' })
+      ops.push({ cx: faceCX, cy: faceCY, radius: R * 0.75, strength: 0.52, kind: 'h-shrink' })
+      break
+    case 'potato':
+      // Wide + flat — face squishes like a potato
+      ops.push({ cx: faceCX, cy: faceCY, radius: R * 0.80, strength: 0.62, kind: 'h-expand' })
+      ops.push({ cx: faceCX, cy: faceCY, radius: R * 0.80, strength: 0.48, kind: 'v-shrink' })
+      break
+    case 'big-mouth':
+      // Jaw and mouth inflate like a bass or a Muppet
+      ops.push({ cx: noseTipP.x, cy: chinP.y - faceH*0.10, radius: faceH*0.50, strength: 0.70, kind: 'expand' })
+      ops.push({ cx: faceCX, cy: chinP.y + faceH*0.05, radius: faceH*0.38, strength: 0.40, kind: 'h-expand' })
+      break
+    case 'tiny-mouth':
+      // Mouth shrinks to an adorable little dot
+      ops.push({ cx: noseTipP.x, cy: chinP.y - faceH*0.18, radius: faceH*0.28, strength: 0.72, kind: 'shrink' })
+      break
+    case 'cyclops':
+      // Both eyes get pulled toward the nose bridge (merge into one giant eye)
+      ops.push({ cx: noseTipP.x, cy: faceCY - faceH*0.12, radius: faceH*0.55, strength: 0.48, kind: 'h-shrink' })
+      // Also expand the nose/eye area so the merged eye looks big
+      ops.push({ cx: noseTipP.x, cy: faceCY - faceH*0.10, radius: faceH*0.22, strength: 0.40, kind: 'expand' })
+      break
+    // funhouse + melting are handled below with per-pixel special logic
   }
 
-  if (ops.length === 0) return
+  const isSpecialFilter = filterId === 'funhouse' || filterId === 'melting'
+  if (ops.length === 0 && !isSpecialFilter) return
 
   const imgData = ctx.getImageData(0, 0, W, H)
   const src = imgData.data
@@ -208,6 +263,38 @@ function applyFaceDistortion(
           case 'shrink':   dispX += dx * t; dispY += dy * t; break   // source farther → region appears smaller
           case 'h-expand': dispX -= dx * t;                   break   // horizontal only expand (fat)
           case 'h-shrink': dispX += dx * t;                   break   // horizontal only shrink (slim)
+          case 'v-expand':                  dispY -= dy * t;  break   // vertical only expand (noodle)
+          case 'v-shrink':                  dispY += dy * t;  break   // vertical only shrink (potato)
+        }
+      }
+
+      // ── Special per-pixel effects ─────────────────────────────────────────
+      if (filterId === 'funhouse') {
+        // Sin-wave funhouse mirror — wobbles across face in X and Y
+        const relX = (x - faceCX) / (faceW * 0.7)
+        const relY = (y - faceCY) / (faceH * 0.7)
+        const inFace = relX*relX + relY*relY < 1.8
+        if (inFace) {
+          const wave = Math.sin(y / (faceH * 0.12)) * faceW * 0.10
+          const wave2 = Math.sin(x / (faceW * 0.12)) * faceH * 0.07
+          const strength = Math.max(0, 1 - Math.sqrt(relX*relX + relY*relY) / 1.35)
+          dispX += wave * strength
+          dispY += wave2 * strength
+        }
+      }
+
+      if (filterId === 'melting') {
+        // Face drips downward like hot wax — displacement grows with y position in face
+        const relY = (y - foreheadP.y) / faceH
+        const relX = (x - faceCX) / (faceW * 0.6)
+        const inFace = Math.abs(relX) < 1.2 && relY > 0.1 && relY < 1.6
+        if (inFace) {
+          const drip = Math.pow(Math.max(0, relY - 0.15), 1.5) * faceH * 0.35
+          // Add horizontal wobble to the drip for extra chaos
+          const wobble = Math.sin(x / (faceW * 0.18) + relY * 3) * faceW * 0.06 * relY
+          const strength = Math.max(0, 1 - Math.abs(relX) / 1.1)
+          dispY -= drip * strength   // source above → pixels stretch down (melting)
+          dispX += wobble * strength
         }
       }
 
