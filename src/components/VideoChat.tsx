@@ -413,6 +413,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
                     display: 'block',
                     opacity: filterReady ? 1 : 0,
                     transition: 'opacity 0.4s ease',
+                    transform: 'scaleX(-1)',  // mirror for self-view; WebRTC stream stays natural
                   }}
                 />
 

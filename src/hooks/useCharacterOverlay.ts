@@ -440,7 +440,9 @@ function renderBackground(ctx: CanvasRenderingContext2D, bgId: string, W: number
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function lm(landmarks: NormalizedLandmark[], idx: number, W: number, H: number) {
   const p = landmarks[idx]
-  return { x: (1 - p.x) * W, y: p.y * H }
+  // Natural coords (no horizontal flip) — video is drawn unmirrored;
+  // display canvas uses CSS scaleX(-1) for self-view mirror effect
+  return { x: p.x * W, y: p.y * H }
 }
 function tracePoly(ctx: CanvasRenderingContext2D, landmarks: NormalizedLandmark[],
                    indices: number[], W: number, H: number) {
@@ -1369,21 +1371,21 @@ export function useCharacterOverlay({ localStream, displayCanvasRef, remoteVideo
       }
 
       // ── Background layer ──────────────────────────────────────────────
+      // Video drawn in NATURAL orientation (no canvas flip).
+      // CSS scaleX(-1) on the display canvas gives the self-view mirror effect.
+      // WebRTC stream stays natural so the remote peer sees correct orientation.
       if (bg === 'none') {
-        // Normal mirrored video
-        ctx.save(); ctx.translate(W,0); ctx.scale(-1,1); ctx.drawImage(vid,0,0,W,H); ctx.restore()
+        ctx.drawImage(vid, 0, 0, W, H)
 
       } else if (bg === 'blur') {
         // Blurred background, then sharp person on top
-        ctx.save(); ctx.filter = 'blur(18px)'
-        ctx.translate(W,0); ctx.scale(-1,1); ctx.drawImage(vid,0,0,W,H)
-        ctx.restore()
+        ctx.save(); ctx.filter = 'blur(18px)'; ctx.drawImage(vid, 0, 0, W, H); ctx.restore()
         // Overlay sharp person using segmentation mask
         if (segmenterReady.current && segmenterRef.current) {
           try {
             const result = segmenterRef.current.segmentForVideo(vid, t)
             const maskData = result.confidenceMasks![0].getAsFloat32Array()
-            sctx.save(); sctx.translate(W,0); sctx.scale(-1,1); sctx.drawImage(vid,0,0,W,H); sctx.restore()
+            sctx.drawImage(vid, 0, 0, W, H)
             const fd = sctx.getImageData(0,0,W,H)
             for (let i = 0; i < maskData.length; i++) { fd.data[i*4+3] = Math.round(maskData[i]*255) }
             sctx.putImageData(fd, 0, 0)
@@ -1398,15 +1400,15 @@ export function useCharacterOverlay({ localStream, displayCanvasRef, remoteVideo
           try {
             const result = segmenterRef.current.segmentForVideo(vid, t)
             const maskData = result.confidenceMasks![0].getAsFloat32Array()
-            sctx.save(); sctx.translate(W,0); sctx.scale(-1,1); sctx.drawImage(vid,0,0,W,H); sctx.restore()
+            sctx.drawImage(vid, 0, 0, W, H)
             const fd = sctx.getImageData(0,0,W,H)
             for (let i = 0; i < maskData.length; i++) { fd.data[i*4+3] = Math.round(maskData[i]*255) }
             sctx.putImageData(fd, 0, 0)
             ctx.drawImage(segCanvas, 0, 0)
           } catch (_) { /* skip frame */ }
         } else {
-          // Fallback: just show mirrored video
-          ctx.save(); ctx.translate(W,0); ctx.scale(-1,1); ctx.drawImage(vid,0,0,W,H); ctx.restore()
+          // Fallback: natural video over background
+          ctx.drawImage(vid, 0, 0, W, H)
         }
       }
 
