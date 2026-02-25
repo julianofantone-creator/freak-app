@@ -44,7 +44,6 @@ const VideoChat: React.FC<VideoChatProps> = ({
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
   const previewVideoRef = useRef<HTMLVideoElement>(null)
   const previewCanvasRef = useRef<HTMLCanvasElement>(null)
-  const inCallCanvasRef = useRef<HTMLCanvasElement>(null)
   const localStreamRef = useRef<MediaStream | null>(null)  // always-current ref for callback ref below
   const pendingCrushIdRef = useRef<string | null>(null) // tracks last crush we sent a msg to (for ack mapping)
 
@@ -74,7 +73,6 @@ const VideoChat: React.FC<VideoChatProps> = ({
     activeDistortion, setDistortionFilter,
     getCanvasVideoTrack,
     filterReady, filterError,
-    canvasRef,
     isMerging, startMerge, stopMerge,
   } = useCharacterOverlay({
     localStream,
@@ -206,46 +204,35 @@ const VideoChat: React.FC<VideoChatProps> = ({
     }
   }, [])
 
-  // ── WebRTC track swap ────────────────────────────────────────────────────
-  // Replaces the outgoing video track with the canvas track when a filter is
-  // active so the remote peer sees the filtered video.
-  // isConnected is in deps so if a filter was active before connecting, we
-  // swap the track as soon as the RTCPeerConnection is ready.
+  // ── WebRTC track swap + local self-view ─────────────────────────────────
+  // When a filter is active:
+  //   • replace the outgoing WebRTC video track with the canvas track
+  //   • also set localVideoRef.srcObject to the canvas stream so the
+  //     in-call self-view shows the filtered output (not the raw camera)
+  // When no filter: restore both to the raw localStream.
   useEffect(() => {
     if (!localStream || !isConnected) return
     const hasFilter = !!activeCharacter || activeAccessories.length > 0 || activeBackground !== 'none' || !!activeDistortion
     if (hasFilter) {
       const canvasTrack = getCanvasVideoTrack()
-      if (canvasTrack) replaceVideoTrack(canvasTrack)
+      if (canvasTrack) {
+        replaceVideoTrack(canvasTrack)
+        // Show filtered canvas in local self-view (video is muted so audio n/a)
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = new MediaStream([canvasTrack])
+          localVideoRef.current.play().catch(() => {})
+        }
+      }
     } else {
       replaceVideoTrack(null)
+      // Restore raw camera to local self-view
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = localStream
+        localVideoRef.current.play().catch(() => {})
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCharacter, activeAccessories, activeBackground, activeDistortion, localStream, isConnected, getCanvasVideoTrack, replaceVideoTrack])
-
-  // ── In-call filter self-view ─────────────────────────────────────────────
-  // When connected and a filter is active, copy the hook's internal canvas
-  // (canvasRef) to inCallCanvasRef every rAF frame so the local self-view
-  // shows the filtered output instead of the raw camera feed.
-  useEffect(() => {
-    if (!isConnected || !filterReady) return
-    const hasFilter = !!activeCharacter || activeAccessories.length > 0 || activeBackground !== 'none' || !!activeDistortion
-    if (!hasFilter) return
-    let rafId: number
-    const loop = () => {
-      const src = canvasRef.current
-      const dst = inCallCanvasRef.current
-      if (src && dst) {
-        if (dst.width !== src.width) dst.width = src.width
-        if (dst.height !== src.height) dst.height = src.height
-        const ctx = dst.getContext('2d')
-        if (ctx) ctx.drawImage(src, 0, 0)
-      }
-      rafId = requestAnimationFrame(loop)
-    }
-    rafId = requestAnimationFrame(loop)
-    return () => cancelAnimationFrame(rafId)
-  }, [isConnected, filterReady, activeCharacter, activeAccessories, activeBackground, activeDistortion, canvasRef])
 
   // Mutual crush detection in date mode (both liked each other → celebrate)
   useEffect(() => {
@@ -377,7 +364,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
 
             {/* ── LOCAL VIDEO (bottom on mobile / right on desktop) ── */}
             <div className="flex-1 relative bg-freak-surface min-h-0">
-              {/* Raw camera feed — always mounted so localVideoCallbackRef fires */}
+              {/* srcObject is swapped to canvas stream when a filter is active */}
               <video
                 ref={localVideoCallbackRef}
                 autoPlay
@@ -385,15 +372,6 @@ const VideoChat: React.FC<VideoChatProps> = ({
                 playsInline
                 className="w-full h-full object-cover"
                 style={{ transform: 'scaleX(-1)' }}
-              />
-              {/* Filter canvas — overlays raw video when a filter is active */}
-              <canvas
-                ref={inCallCanvasRef}
-                className="absolute inset-0 w-full h-full object-cover pointer-events-none"
-                style={{
-                  transform: 'scaleX(-1)',
-                  display: (filterReady && (!!activeCharacter || activeAccessories.length > 0 || activeBackground !== 'none' || !!activeDistortion)) ? 'block' : 'none',
-                }}
               />
               {!isVideoOn && (
                 <div className="absolute inset-0 bg-freak-surface flex items-center justify-center">
