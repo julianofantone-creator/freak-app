@@ -177,6 +177,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
         localVideoRef.current.play().catch(() => {})
       }
       if (previewVideoRef.current) {
+        previewVideoRef.current.muted = true   // React muted prop doesn't set DOM attr reliably
         previewVideoRef.current.srcObject = localStream
         previewVideoRef.current.play().catch(() => {})
       }
@@ -204,8 +205,10 @@ const VideoChat: React.FC<VideoChatProps> = ({
   // ── WebRTC track swap ────────────────────────────────────────────────────
   // Replaces the outgoing video track with the canvas track when a filter is
   // active so the remote peer sees the filtered video.
+  // isConnected is in deps so if a filter was active before connecting, we
+  // swap the track as soon as the RTCPeerConnection is ready.
   useEffect(() => {
-    if (!localStream) return
+    if (!localStream || !isConnected) return
     const hasFilter = !!activeCharacter || activeAccessories.length > 0 || activeBackground !== 'none' || !!activeDistortion
     if (hasFilter) {
       const canvasTrack = getCanvasVideoTrack()
@@ -214,7 +217,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
       replaceVideoTrack(null)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeCharacter, activeAccessories, activeBackground, activeDistortion, localStream, getCanvasVideoTrack, replaceVideoTrack])
+  }, [activeCharacter, activeAccessories, activeBackground, activeDistortion, localStream, isConnected, getCanvasVideoTrack, replaceVideoTrack])
 
   // Mutual crush detection in date mode (both liked each other → celebrate)
   useEffect(() => {

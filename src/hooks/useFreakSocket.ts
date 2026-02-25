@@ -46,6 +46,7 @@ export function useFreakSocket({
 }: UseFreakSocketOptions) {
   const socketRef = useRef<Socket | null>(null)
   const pcRef = useRef<RTCPeerConnection | null>(null)
+  const pendingCandidates = useRef<RTCIceCandidateInit[]>([])  // queue ICE until remoteDescription set
   const [isReady, setIsReady] = useState(false)
   const [serverOffline, setServerOffline] = useState(false)
   const [liveStats, setLiveStats] = useState<{ online: number; inCalls: number; searching: number } | null>(null)
@@ -80,6 +81,7 @@ export function useFreakSocket({
   useEffect(() => { onMessageAckRef.current = onMessageAck }, [onMessageAck])
 
   const closePC = useCallback(() => {
+    pendingCandidates.current = []   // clear queued ICE on disconnect
     if (pcRef.current) {
       pcRef.current.ontrack = null
       pcRef.current.onicecandidate = null
@@ -216,6 +218,11 @@ export function useFreakSocket({
         const pc = pcRef.current || createPC()
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(offer))
+          // Flush any ICE candidates that arrived before remote description was set
+          while (pendingCandidates.current.length > 0) {
+            const c = pendingCandidates.current.shift()!
+            try { await pc.addIceCandidate(new RTCIceCandidate(c)) } catch (_) {}
+          }
           const answer = await pc.createAnswer()
           await pc.setLocalDescription(answer)
           socket.emit('webrtc:answer', { answer })
@@ -230,8 +237,14 @@ export function useFreakSocket({
         console.log('📡 Answer received')
         const pc = pcRef.current
         if (pc) {
-          try { await pc.setRemoteDescription(new RTCSessionDescription(answer)) }
-          catch (e) { console.error('Set remote answer failed:', e) }
+          try {
+            await pc.setRemoteDescription(new RTCSessionDescription(answer))
+            // Flush any ICE candidates that arrived before remote description was set
+            while (pendingCandidates.current.length > 0) {
+              const c = pendingCandidates.current.shift()!
+              try { await pc.addIceCandidate(new RTCIceCandidate(c)) } catch (_) {}
+            }
+          } catch (e) { console.error('Set remote answer failed:', e) }
         }
       })
 
@@ -239,6 +252,11 @@ export function useFreakSocket({
       socket.on('webrtc:ice-candidate', async ({ candidate }: { candidate: RTCIceCandidateInit }) => {
         const pc = pcRef.current
         if (pc && candidate) {
+          if (!pc.remoteDescription) {
+            // Remote description not set yet — queue for later
+            pendingCandidates.current.push(candidate)
+            return
+          }
           try { await pc.addIceCandidate(new RTCIceCandidate(candidate)) }
           catch (e) { console.warn('ICE add failed:', e) }
         }
@@ -315,7 +333,7 @@ export function useFreakSocket({
     setTimeout(() => {
       onSearchingRef.current()
       if (socketRef.current?.connected) {
-        socketRef.current.emit('join-queue', { username })
+        socketRef.current.emit('join-queue', { username, mode: pendingMode.current })
       } else {
         pendingJoin.current = true
       }
