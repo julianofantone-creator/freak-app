@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Heart, SkipForward, Square, Video, VideoOff, Mic, MicOff, Zap, Sparkles } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -43,8 +43,11 @@ const VideoChat: React.FC<VideoChatProps> = ({
   const localVideoRef = useRef<HTMLVideoElement>(null)
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
   const previewVideoRef = useRef<HTMLVideoElement>(null)
-  const previewCanvasRef = useRef<HTMLCanvasElement>(null)
-  const inCallCanvasRef  = useRef<HTMLCanvasElement>(null)
+  const previewCanvasRef    = useRef<HTMLCanvasElement>(null)
+  const inCallCanvasRef     = useRef<HTMLCanvasElement>(null)
+  // Stable array ref — passing an inline [] literal every render would cause the
+  // hook's draw-loop useEffect to restart on every render, killing the canvas stream.
+  const displayCanvasRefs   = useMemo(() => [previewCanvasRef, inCallCanvasRef], [])
   const localStreamRef = useRef<MediaStream | null>(null)  // always-current ref for callback ref below
   const pendingCrushIdRef = useRef<string | null>(null) // tracks last crush we sent a msg to (for ack mapping)
 
@@ -77,7 +80,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
     isMerging, startMerge, stopMerge,
   } = useCharacterOverlay({
     localStream,
-    displayCanvasRefs: [previewCanvasRef, inCallCanvasRef],
+    displayCanvasRefs,
     remoteVideoRef,
   })
 
