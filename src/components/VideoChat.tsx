@@ -186,11 +186,18 @@ const VideoChat: React.FC<VideoChatProps> = ({
   // Callback ref for in-call local video — fires the instant the element mounts,
   // regardless of React batching. Guarantees srcObject is set even if localStream
   // didn't change between renders.
+  // NOTE: React's `muted` JSX prop doesn't reliably set the DOM attribute — we set
+  // it explicitly here so desktop Chrome doesn't block autoplay on "unmuted" video.
   const localVideoCallbackRef = useCallback((el: HTMLVideoElement | null) => {
     localVideoRef.current = el
-    if (el && localStreamRef.current) {
-      el.srcObject = localStreamRef.current
-      el.play().catch(() => {})
+    if (el) {
+      el.muted = true          // must set via DOM — React JSX muted prop is broken
+      el.playsInline = true
+      el.autoplay = true
+      if (localStreamRef.current) {
+        el.srcObject = localStreamRef.current
+        el.play().catch((e) => console.warn('[LocalVideo] play() rejected:', e))
+      }
     }
   }, [])
 
