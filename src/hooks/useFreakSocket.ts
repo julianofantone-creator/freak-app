@@ -25,8 +25,10 @@ interface UseFreakSocketOptions {
 const ICE_SERVERS = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
-  { urls: 'stun:stun2.l.google.com:19302' },
-  { urls: 'stun:stun3.l.google.com:19302' },
+  // TURN relay — handles strict NAT, mobile carriers, firewalls
+  { urls: 'turn:openrelay.metered.ca:80',  username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turns:openrelay.metered.ca:443',username: 'openrelayproject', credential: 'openrelayproject' },
 ]
 
 export function useFreakSocket({
@@ -99,12 +101,14 @@ export function useFreakSocket({
       })
     }
 
-    // When remote stream arrives — attach to video element
+    // When remote stream arrives — attach to video element and force play
     const remoteStream = new MediaStream()
     pc.ontrack = (e) => {
       remoteStream.addTrack(e.track)
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = remoteStream
+        // Force play — autoPlay attr alone isn't enough when srcObject is set dynamically
+        remoteVideoRef.current.play().catch(() => {})
       }
     }
 
