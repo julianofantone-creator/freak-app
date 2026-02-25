@@ -1196,13 +1196,13 @@ function drawNameTag(ctx: CanvasRenderingContext2D, char: Character,
 // ─── Main hook ────────────────────────────────────────────────────────────────
 interface UseCharacterOverlayOptions {
   localStream: MediaStream | null
-  /** Optional canvas element to blit every frame into (for live preview) */
-  displayCanvasRef?: React.RefObject<HTMLCanvasElement>
+  /** Canvas elements to blit every frame into (preview + in-call self-view) */
+  displayCanvasRefs?: React.RefObject<HTMLCanvasElement>[]
   /** Remote video element — used for Face Merge */
   remoteVideoRef?: React.RefObject<HTMLVideoElement>
 }
 
-export function useCharacterOverlay({ localStream, displayCanvasRef, remoteVideoRef }: UseCharacterOverlayOptions) {
+export function useCharacterOverlay({ localStream, displayCanvasRefs, remoteVideoRef }: UseCharacterOverlayOptions) {
   const [activeCharacter,    setActiveCharacter]    = useState<Character | null>(null)
   const [activeAccessories,  setActiveAccessories]  = useState<string[]>([])
   const [activeBackground,   setActiveBackground]   = useState<string>('none')
@@ -2113,11 +2113,15 @@ export function useCharacterOverlay({ localStream, displayCanvasRef, remoteVideo
         }
       }
 
-      // Blit to display canvas (preview pane) if provided
-      const dc = displayCanvasRef?.current
-      if (dc) {
-        const dctx = dc.getContext('2d')
-        if (dctx) dctx.drawImage(canvas, 0, 0, dc.width, dc.height)
+      // Blit to all display canvases (preview pane + in-call self-view)
+      if (displayCanvasRefs) {
+        for (const ref of displayCanvasRefs) {
+          const dc = ref.current
+          if (dc) {
+            const dctx = dc.getContext('2d')
+            if (dctx) dctx.drawImage(canvas, 0, 0, dc.width, dc.height)
+          }
+        }
       }
 
       rafRef.current = requestAnimationFrame(draw)
@@ -2128,7 +2132,7 @@ export function useCharacterOverlay({ localStream, displayCanvasRef, remoteVideo
       if (rafRef.current) cancelAnimationFrame(rafRef.current)
       vid.srcObject = null; canvasStreamRef.current = null; canvasRef.current = null
     }
-  }, [localStream, displayCanvasRef])
+  }, [localStream, displayCanvasRefs])
 
   const getCanvasVideoTrack = useCallback((): MediaStreamTrack | null => canvasStreamRef.current?.getVideoTracks()[0] ?? null, [])
   const selectCharacter     = useCallback((char: Character | null) => setActiveCharacter(char), [])

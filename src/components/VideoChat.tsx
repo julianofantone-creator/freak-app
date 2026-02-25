@@ -44,6 +44,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
   const remoteVideoRef = useRef<HTMLVideoElement>(null)
   const previewVideoRef = useRef<HTMLVideoElement>(null)
   const previewCanvasRef = useRef<HTMLCanvasElement>(null)
+  const inCallCanvasRef  = useRef<HTMLCanvasElement>(null)
   const localStreamRef = useRef<MediaStream | null>(null)  // always-current ref for callback ref below
   const pendingCrushIdRef = useRef<string | null>(null) // tracks last crush we sent a msg to (for ack mapping)
 
@@ -76,7 +77,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
     isMerging, startMerge, stopMerge,
   } = useCharacterOverlay({
     localStream,
-    displayCanvasRef: previewCanvasRef,
+    displayCanvasRefs: [previewCanvasRef, inCallCanvasRef],
     remoteVideoRef,
   })
 
@@ -204,32 +205,19 @@ const VideoChat: React.FC<VideoChatProps> = ({
     }
   }, [])
 
-  // ── WebRTC track swap + local self-view ─────────────────────────────────
-  // When a filter is active:
-  //   • replace the outgoing WebRTC video track with the canvas track
-  //   • also set localVideoRef.srcObject to the canvas stream so the
-  //     in-call self-view shows the filtered output (not the raw camera)
-  // When no filter: restore both to the raw localStream.
+  // ── WebRTC track swap ────────────────────────────────────────────────────
+  // Replaces the outgoing video track with the canvas track when a filter is
+  // active so the remote peer sees the filtered video.
+  // isConnected is in deps so if a filter was active before connecting, we
+  // swap the track as soon as the RTCPeerConnection is ready.
   useEffect(() => {
     if (!localStream || !isConnected) return
     const hasFilter = !!activeCharacter || activeAccessories.length > 0 || activeBackground !== 'none' || !!activeDistortion
     if (hasFilter) {
       const canvasTrack = getCanvasVideoTrack()
-      if (canvasTrack) {
-        replaceVideoTrack(canvasTrack)
-        // Show filtered canvas in local self-view (video is muted so audio n/a)
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = new MediaStream([canvasTrack])
-          localVideoRef.current.play().catch(() => {})
-        }
-      }
+      if (canvasTrack) replaceVideoTrack(canvasTrack)
     } else {
       replaceVideoTrack(null)
-      // Restore raw camera to local self-view
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = localStream
-        localVideoRef.current.play().catch(() => {})
-      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeCharacter, activeAccessories, activeBackground, activeDistortion, localStream, isConnected, getCanvasVideoTrack, replaceVideoTrack])
@@ -364,7 +352,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
 
             {/* ── LOCAL VIDEO (bottom on mobile / right on desktop) ── */}
             <div className="flex-1 relative bg-freak-surface min-h-0">
-              {/* srcObject is swapped to canvas stream when a filter is active */}
+              {/* Raw camera — always visible; canvas overlays it when filter active */}
               <video
                 ref={localVideoCallbackRef}
                 autoPlay
@@ -372,6 +360,18 @@ const VideoChat: React.FC<VideoChatProps> = ({
                 playsInline
                 className="w-full h-full object-cover"
                 style={{ transform: 'scaleX(-1)' }}
+              />
+              {/* Filter canvas self-view — hook blits filtered output here every frame */}
+              <canvas
+                ref={inCallCanvasRef}
+                width={640} height={480}
+                className="absolute inset-0 w-full h-full"
+                style={{
+                  display: 'block',
+                  opacity: (filterReady && (!!activeCharacter || activeAccessories.length > 0 || activeBackground !== 'none' || !!activeDistortion)) ? 1 : 0,
+                  transform: 'scaleX(-1)',
+                  pointerEvents: 'none',
+                }}
               />
               {!isVideoOn && (
                 <div className="absolute inset-0 bg-freak-surface flex items-center justify-center">
