@@ -22,18 +22,21 @@ interface UseFreakSocketOptions {
   onMessageAck?: (id: string, status: 'delivered' | 'queued') => void
 }
 
+// Metered.ca dedicated TURN — freak.metered.live (500MB free tier, renews MAR-2026)
+// All 4 relay endpoints cover: UDP 80, TCP 80, UDP 443, TLS 443 — handles strict firewalls + mobile carriers
+const TURN_USER = 'dd307a5fafaabea3119577b2'
+const TURN_CRED = '3QZQE59LiCiMKHlg'
+
 const ICE_SERVERS = [
+  // STUN — multiple sources for redundancy
+  { urls: 'stun:stun.relay.metered.ca:80' },
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
-  { urls: 'stun:stun2.l.google.com:19302' },
-  { urls: 'stun:stun3.l.google.com:19302' },
-  { urls: 'stun:stun4.l.google.com:19302' },
-  // TURN relay — handles strict NAT, mobile carriers, firewalls
-  // TODO: replace with metered.ca API-keyed credentials for production reliability
-  { urls: 'turn:openrelay.metered.ca:80',    username: 'openrelayproject', credential: 'openrelayproject' },
-  { urls: 'turn:openrelay.metered.ca:443',   username: 'openrelayproject', credential: 'openrelayproject' },
-  { urls: 'turns:openrelay.metered.ca:443',  username: 'openrelayproject', credential: 'openrelayproject' },
-  { urls: 'turn:openrelay.metered.ca:80?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+  // TURN — dedicated Metered.ca relay (replaces unreliable openrelay public servers)
+  { urls: 'turn:global.relay.metered.ca:80',               username: TURN_USER, credential: TURN_CRED },
+  { urls: 'turn:global.relay.metered.ca:80?transport=tcp', username: TURN_USER, credential: TURN_CRED },
+  { urls: 'turn:global.relay.metered.ca:443',              username: TURN_USER, credential: TURN_CRED },
+  { urls: 'turns:global.relay.metered.ca:443?transport=tcp', username: TURN_USER, credential: TURN_CRED },
 ]
 
 export function useFreakSocket({
