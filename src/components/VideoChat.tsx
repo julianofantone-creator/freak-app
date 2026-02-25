@@ -166,6 +166,9 @@ const VideoChat: React.FC<VideoChatProps> = ({
   })
 
   // ── Local video srcObject (in-call + idle preview) ──────────────────────
+  // isConnected is in the dep array because when connecting, the in-call
+  // localVideoRef mounts fresh — localStream hasn't changed so we need
+  // isConnected to trigger the re-run and set srcObject on the new element.
   useEffect(() => {
     if (localStream) {
       if (localVideoRef.current) {
@@ -177,7 +180,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
         previewVideoRef.current.play().catch(() => {})
       }
     }
-  }, [localStream])
+  }, [localStream, isConnected])
 
   // ── WebRTC track swap ────────────────────────────────────────────────────
   // Replaces the outgoing video track with the canvas track when a filter is
