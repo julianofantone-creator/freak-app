@@ -6,6 +6,7 @@ import { User, ConnectionState, Crush, ChatMessage } from '../types'
 import CrushesPanel from './CrushesPanel'
 import StreamOverlay from './StreamOverlay'
 import CharacterPicker from './CharacterPicker'
+import ExplosionOverlay from './ExplosionOverlay'
 import { useFreakSocket } from '../hooks/useFreakSocket'
 import { useCharacterOverlay } from '../hooks/useCharacterOverlay'
 
@@ -68,6 +69,8 @@ const VideoChat: React.FC<VideoChatProps> = ({
   const [dateTimeLeft, setDateTimeLeft] = useState<number | null>(null)
   const [showDateEndOverlay, setShowDateEndOverlay] = useState(false)
   const [mutualCrush, setMutualCrush] = useState(false)
+  const [exploding, setExploding] = useState(false)
+  const explosionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // ── Character overlay ──────────────────────────────────────────────────────
   const {
@@ -232,6 +235,19 @@ const VideoChat: React.FC<VideoChatProps> = ({
     }
   }, [incomingCrush, crushedCurrentPartner, chatMode])
 
+  // ── Explosion timer — free users get 7 min, Freaky+ = unlimited ────────────
+  useEffect(() => {
+    if (explosionTimerRef.current) clearTimeout(explosionTimerRef.current)
+    if (isConnected && !premium?.isPremium) {
+      explosionTimerRef.current = setTimeout(() => {
+        setExploding(true)
+        // 1 second of glorious BOOM, then auto-skip to next person
+        setTimeout(() => { setExploding(false); skip() }, 1000)
+      }, 7 * 60 * 1000)
+    }
+    return () => { if (explosionTimerRef.current) clearTimeout(explosionTimerRef.current) }
+  }, [isConnected, premium?.isPremium]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // Date mode countdown
   useEffect(() => {
     if (dateTimeLeft === null || dateTimeLeft <= 0) {
@@ -328,6 +344,8 @@ const VideoChat: React.FC<VideoChatProps> = ({
                 playsInline
                 className="w-full h-full object-cover"
               />
+              {/* 💥 EXPLOSION — fires at 7 min for free users */}
+              <ExplosionOverlay active={exploding} />
               {/* Partner name badge */}
               <div className="absolute top-3 left-3 bg-black/50 backdrop-blur-sm px-3 py-1 rounded-full">
                 <span className="text-white text-sm font-semibold">{currentPartner.username}</span>
