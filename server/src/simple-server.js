@@ -302,6 +302,21 @@ io.on('connection', (socket) => {
     tryMatch(socket, queueMode, cleanTags)
   })
 
+  // Fast "I'm leaving" signal — fires BEFORE socket cleanup so partner disconnects immediately
+  // This is the primary fix for the ghost-connection bug (partner sees your face after you left)
+  socket.on('partner-leaving', () => {
+    const partnerId = activePairs.get(socket.id)
+    if (partnerId) {
+      const partnerSocket = io.sockets.sockets.get(partnerId)
+      if (partnerSocket) {
+        partnerSocket.emit('peer-disconnected', { reason: 'partner left' })
+        console.log(`🚪 Fast disconnect: ${username} → notified partner immediately`)
+      }
+      activePairs.delete(socket.id)
+      activePairs.delete(partnerId)
+    }
+  })
+
   // User leaves queue / session
   socket.on('leave-queue', () => {
     cleanup(socket)

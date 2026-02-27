@@ -138,7 +138,11 @@ const VideoChat: React.FC<VideoChatProps> = ({
       setDateTimeLeft(null)
       setShowDateEndOverlay(false)
       setMutualCrush(false)
-      if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null
+      if (remoteVideoRef.current) {
+        remoteVideoRef.current.srcObject = null
+        remoteVideoRef.current.pause()
+        remoteVideoRef.current.load()  // clears last rendered frame
+      }
     },
     onSearching: () => {
       setIsSearching(true)

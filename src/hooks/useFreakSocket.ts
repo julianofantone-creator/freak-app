@@ -54,6 +54,8 @@ export function useFreakSocket({
 }: UseFreakSocketOptions) {
   const socketRef = useRef<Socket | null>(null)
   const pcRef = useRef<RTCPeerConnection | null>(null)
+  const remoteStreamRef = useRef<MediaStream | null>(null)  // stored at hook level so closePC can stop tracks
+  const iceDisconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)  // timer for ICE disconnect → full close
   const pendingCandidates = useRef<RTCIceCandidateInit[]>([])  // queue ICE until remoteDescription set
   const isInitiatorRef = useRef(false)  // track who created the original offer (for ICE restart)
   const [isReady, setIsReady] = useState(false)
@@ -91,14 +93,36 @@ export function useFreakSocket({
   useEffect(() => { onMessageAckRef.current = onMessageAck }, [onMessageAck])
 
   const closePC = useCallback(() => {
-    pendingCandidates.current = []   // clear queued ICE on disconnect
+    // Clear any pending ICE disconnect timer
+    if (iceDisconnectTimerRef.current) {
+      clearTimeout(iceDisconnectTimerRef.current)
+      iceDisconnectTimerRef.current = null
+    }
+    pendingCandidates.current = []
+
+    // ── Kill the peer connection ──────────────────────────────────────────
     if (pcRef.current) {
       pcRef.current.ontrack = null
       pcRef.current.onicecandidate = null
+      pcRef.current.oniceconnectionstatechange = null
+      pcRef.current.onconnectionstatechange = null
       pcRef.current.close()
       pcRef.current = null
     }
-    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null
+
+    // ── Stop ALL remote stream tracks — this is the key fix ──────────────
+    // Without this, the tracks keep flowing even after srcObject = null
+    if (remoteStreamRef.current) {
+      remoteStreamRef.current.getTracks().forEach(t => t.stop())
+      remoteStreamRef.current = null
+    }
+
+    // ── Fully clear the remote video element ─────────────────────────────
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.srcObject = null
+      remoteVideoRef.current.pause()
+      remoteVideoRef.current.load()  // resets the element — clears last frame
+    }
   }, [remoteVideoRef])
 
   const createPC = useCallback(() => {
@@ -113,25 +137,19 @@ export function useFreakSocket({
       })
     }
 
-    // When remote stream arrives — attach to video element and force play
-    // NOTE: ontrack fires separately for video and audio tracks. We attach srcObject
-    // on the first track only to avoid redundant play() calls (which can block on iOS).
-    const remoteStream = new MediaStream()
+    // When remote stream arrives — store at hook level so closePC can stop tracks
+    remoteStreamRef.current = new MediaStream()
     let remoteStreamAttached = false
     pc.ontrack = (e) => {
-      remoteStream.addTrack(e.track)
+      remoteStreamRef.current!.addTrack(e.track)
       if (remoteVideoRef.current) {
         if (!remoteStreamAttached) {
           remoteStreamAttached = true
-          remoteVideoRef.current.srcObject = remoteStream
-          // Force play — autoPlay attr alone isn't enough when srcObject is set dynamically
+          remoteVideoRef.current.srcObject = remoteStreamRef.current
           remoteVideoRef.current.play().catch((err) => {
-            // Autoplay blocked (common on iOS without user gesture in flight)
-            // The video element has autoPlay + playsInline which re-attempts automatically
             console.warn('[WebRTC] remote video autoplay blocked:', err)
           })
         }
-        // Track added to existing stream — browser will start playing it automatically
       }
     }
 
@@ -142,12 +160,50 @@ export function useFreakSocket({
       }
     }
 
+    // ── Connection state (high-level) — catches failed/closed definitively ──
+    pc.onconnectionstatechange = () => {
+      const state = pc.connectionState
+      console.log('[WebRTC] Connection state:', state)
+      if (state === 'failed' || state === 'closed') {
+        // Hard failure — shut everything down immediately
+        closePC()
+        onDisconnectedRef.current()
+        socketRef.current?.emit('partner-leaving')  // tell server to notify partner
+      }
+    }
+
+    // ── ICE state — granular network-level changes ───────────────────────
     pc.oniceconnectionstatechange = async () => {
       const state = pc.iceConnectionState
       console.log('[WebRTC] ICE state:', state)
+
+      if (state === 'disconnected') {
+        // Start a 5s timer — if not recovered, treat as a full failure
+        // This covers the case where one side leaves but ICE never reaches 'failed'
+        if (iceDisconnectTimerRef.current) clearTimeout(iceDisconnectTimerRef.current)
+        iceDisconnectTimerRef.current = setTimeout(() => {
+          console.log('[WebRTC] ICE disconnected for 5s — closing connection')
+          closePC()
+          onDisconnectedRef.current()
+          socketRef.current?.emit('partner-leaving')
+        }, 5000)
+      }
+
+      if (state === 'connected' || state === 'completed') {
+        // Recovered — clear the disconnect timer
+        if (iceDisconnectTimerRef.current) {
+          clearTimeout(iceDisconnectTimerRef.current)
+          iceDisconnectTimerRef.current = null
+        }
+      }
+
       if (state === 'failed') {
+        if (iceDisconnectTimerRef.current) {
+          clearTimeout(iceDisconnectTimerRef.current)
+          iceDisconnectTimerRef.current = null
+        }
         if (isInitiatorRef.current) {
-          // Only the original offerer sends the restart offer — answerer waits
+          // Initiator attempts ICE restart before giving up
           try {
             const offer = await pc.createOffer({ iceRestart: true })
             await pc.setLocalDescription(offer)
@@ -156,13 +212,13 @@ export function useFreakSocket({
               console.log('[WebRTC] ICE restart offer sent')
             }
           } catch (e) {
-            console.error('[ICE] restart offer failed:', e)
+            console.error('[ICE] restart offer failed — closing:', e)
+            closePC()
+            onDisconnectedRef.current()
           }
         }
-        // Answerer: wait for new offer from initiator (triggered by their restart above)
+        // Answerer waits for restart offer from initiator
       }
-      // 'disconnected' is a brief network blip — WebRTC may recover on its own within ~5s
-      // We don't act on it; 'failed' is the definitive failure state
     }
 
     pcRef.current = pc
@@ -339,6 +395,9 @@ export function useFreakSocket({
     return () => {
       cancelled = true
       if (retryTimer.current) clearTimeout(retryTimer.current)
+      if (iceDisconnectTimerRef.current) clearTimeout(iceDisconnectTimerRef.current)
+      // Notify partner before socket closes — they get instant cleanup
+      socketRef.current?.emit('partner-leaving')
       closePC()
       socketRef.current?.disconnect()
     }
@@ -360,6 +419,9 @@ export function useFreakSocket({
   }, [isReady, username])
 
   const leaveQueue = useCallback(() => {
+    // Emit partner-leaving FIRST — server immediately notifies partner before any cleanup
+    // This is the fastest path: partner gets disconnected within one round-trip
+    socketRef.current?.emit('partner-leaving')
     socketRef.current?.emit('leave-queue')
     closePC()
   }, [closePC])
