@@ -410,5 +410,9 @@ export function useFreakSocket({
     }
   }, [])
 
-  return { joinQueue, skip, stop, isReady, serverOffline, liveStats, sendCrushRequest, acceptCrushRequest, sendDirectCrushMessage, sendReadReceipt, replaceVideoTrack }
+  const sendCallChat = useCallback((text: string) => {
+    socketRef.current?.emit('chat-message', { type: 'text', text })
+  }, [])
+
+  return { joinQueue, skip, stop, isReady, serverOffline, liveStats, sendCrushRequest, acceptCrushRequest, sendDirectCrushMessage, sendReadReceipt, replaceVideoTrack, sendCallChat }
 }

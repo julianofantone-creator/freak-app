@@ -1401,14 +1401,14 @@ export function useCharacterOverlay({ localStream, displayCanvasRefs, remoteVide
     if (!localStream) return
 
     const canvas = document.createElement('canvas')
-    canvas.width = 1280; canvas.height = 720
+    canvas.width = 640; canvas.height = 360
     canvasRef.current = canvas
     canvasStreamRef.current = canvas.captureStream(30)
     const ctx = canvas.getContext('2d')!
     const particlePool: Particle[] = []  // lives for duration of this stream session
 
     const maskCanvas = document.createElement('canvas')
-    maskCanvas.width = 1280; maskCanvas.height = 720
+    maskCanvas.width = 640; maskCanvas.height = 360
     const mctx = maskCanvas.getContext('2d')!
 
     // ── Skin texture noise (created once, reused every frame) ────────────
@@ -1428,8 +1428,15 @@ export function useCharacterOverlay({ localStream, displayCanvasRefs, remoteVide
 
     // Segmentation canvas for person cutout
     const segCanvas = document.createElement('canvas')
-    segCanvas.width = 1280; segCanvas.height = 720
+    segCanvas.width = 640; segCanvas.height = 360
     const sctx = segCanvas.getContext('2d')!
+
+    // ── Perf: FPS cap + detection throttle ───────────────────────────────────
+    let lastDrawTime = 0
+    let lastLandmarkTime = 0
+    let cachedLandmarks: NormalizedLandmark[] | null = null
+    let lastSegmentTime = 0
+    let cachedSegMask: Float32Array | null = null
 
     const vid = document.createElement('video')
     vid.srcObject = localStream; vid.autoplay = true; vid.muted = true
@@ -1437,11 +1444,15 @@ export function useCharacterOverlay({ localStream, displayCanvasRefs, remoteVide
     const W = canvas.width, H = canvas.height
 
     const draw = () => {
+      const t = performance.now()
+      // ── FPS cap: 30fps max — frees CPU for WebRTC encoder ────────────────
+      if (t - lastDrawTime < 33) { rafRef.current = requestAnimationFrame(draw); return }
+      lastDrawTime = t
+
       const char  = activeCharRef.current
       const accs  = activeAccRef.current
       const bg    = activeBgRef.current
       const ready = vid.readyState >= 2
-      const t     = performance.now()
 
       if (!ready) {
         ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H)
@@ -1461,13 +1472,19 @@ export function useCharacterOverlay({ localStream, displayCanvasRefs, remoteVide
         // Overlay sharp person using segmentation mask
         if (segmenterReady.current && segmenterRef.current) {
           try {
-            const result = segmenterRef.current.segmentForVideo(vid, t)
-            const maskData = result.confidenceMasks![0].getAsFloat32Array()
-            sctx.drawImage(vid, 0, 0, W, H)
-            const fd = sctx.getImageData(0,0,W,H)
-            for (let i = 0; i < maskData.length; i++) { fd.data[i*4+3] = Math.round(maskData[i]*255) }
-            sctx.putImageData(fd, 0, 0)
-            ctx.drawImage(segCanvas, 0, 0)
+            // Throttle segmentation to ~10fps — mask changes slowly
+            if (t - lastSegmentTime > 100) {
+              const result = segmenterRef.current.segmentForVideo(vid, t)
+              cachedSegMask = result.confidenceMasks![0].getAsFloat32Array()
+              lastSegmentTime = t
+            }
+            if (cachedSegMask) {
+              sctx.drawImage(vid, 0, 0, W, H)
+              const fd = sctx.getImageData(0,0,W,H)
+              for (let i = 0; i < cachedSegMask.length; i++) { fd.data[i*4+3] = Math.round(cachedSegMask[i]*255) }
+              sctx.putImageData(fd, 0, 0)
+              ctx.drawImage(segCanvas, 0, 0)
+            }
           } catch (_) { /* skip frame */ }
         }
 
@@ -1476,13 +1493,19 @@ export function useCharacterOverlay({ localStream, displayCanvasRefs, remoteVide
         renderBackground(ctx, bg, W, H, t)
         if (segmenterReady.current && segmenterRef.current) {
           try {
-            const result = segmenterRef.current.segmentForVideo(vid, t)
-            const maskData = result.confidenceMasks![0].getAsFloat32Array()
-            sctx.drawImage(vid, 0, 0, W, H)
-            const fd = sctx.getImageData(0,0,W,H)
-            for (let i = 0; i < maskData.length; i++) { fd.data[i*4+3] = Math.round(maskData[i]*255) }
-            sctx.putImageData(fd, 0, 0)
-            ctx.drawImage(segCanvas, 0, 0)
+            // Throttle segmentation to ~10fps — reuse cached mask between frames
+            if (t - lastSegmentTime > 100) {
+              const result = segmenterRef.current.segmentForVideo(vid, t)
+              cachedSegMask = result.confidenceMasks![0].getAsFloat32Array()
+              lastSegmentTime = t
+            }
+            if (cachedSegMask) {
+              sctx.drawImage(vid, 0, 0, W, H)
+              const fd = sctx.getImageData(0,0,W,H)
+              for (let i = 0; i < cachedSegMask.length; i++) { fd.data[i*4+3] = Math.round(cachedSegMask[i]*255) }
+              sctx.putImageData(fd, 0, 0)
+              ctx.drawImage(segCanvas, 0, 0)
+            }
           } catch (_) { /* skip frame */ }
         } else {
           // Fallback: natural video over background
@@ -1524,8 +1547,13 @@ export function useCharacterOverlay({ localStream, displayCanvasRefs, remoteVide
       let landmarks: NormalizedLandmark[] | null = null
       if ((hasFilter || hasDistortion) && landmarkerReady.current && landmarkerRef.current) {
         try {
-          const result = landmarkerRef.current.detectForVideo(vid, t)
-          landmarks = result.faceLandmarks[0] ?? null
+          // Throttle MediaPipe to ~15fps — cache landmarks between frames
+          if (t - lastLandmarkTime > 66) {
+            const result = landmarkerRef.current.detectForVideo(vid, t)
+            cachedLandmarks = result.faceLandmarks[0] ?? null
+            lastLandmarkTime = t
+          }
+          landmarks = cachedLandmarks
         } catch (_) {}
       }
 

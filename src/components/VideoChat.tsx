@@ -7,6 +7,7 @@ import CrushesPanel from './CrushesPanel'
 import StreamOverlay from './StreamOverlay'
 import CharacterPicker from './CharacterPicker'
 import ExplosionOverlay from './ExplosionOverlay'
+import InCallChat, { CallMessage } from './InCallChat'
 import { useFreakSocket } from '../hooks/useFreakSocket'
 import { useCharacterOverlay } from '../hooks/useCharacterOverlay'
 
@@ -95,7 +96,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
     if (localStream) return localStream
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 360 } },
         audio: true,
       })
       setLocalStream(stream)
