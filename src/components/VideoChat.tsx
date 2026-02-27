@@ -112,12 +112,12 @@ const VideoChat: React.FC<VideoChatProps> = ({
     return () => { localStream?.getTracks().forEach(t => t.stop()) }
   }, [localStream])
 
-  const { joinQueue, skip, stop, serverOffline, liveStats, sendCrushRequest, acceptCrushRequest, sendDirectCrushMessage, sendReadReceipt, replaceVideoTrack } = useFreakSocket({
+  const { joinQueue, skip, stop, serverOffline, liveStats, sharedTags, sendCrushRequest, acceptCrushRequest, sendDirectCrushMessage, sendReadReceipt, replaceVideoTrack } = useFreakSocket({
     username: _user.username,
     localStream,
     remoteVideoRef,
-    onConnected: (partner, mode) => {
-      setCurrentPartner({ id: partner.id, username: partner.username, interests: [], joinedAt: new Date(), connectionsCount: 0 })
+    onConnected: (partner, mode, common) => {
+      setCurrentPartner({ id: partner.id, username: partner.username, interests: common ?? [], joinedAt: new Date(), connectionsCount: 0 })
       setIsConnected(true)
       setIsSearching(false)
       setCrushedCurrentPartner(false)
@@ -262,8 +262,8 @@ const VideoChat: React.FC<VideoChatProps> = ({
   const startSearch = useCallback(async (mode: 'random' | 'date' = chatMode) => {
     const stream = await initMedia()
     if (!stream) return
-    joinQueue(mode)
-  }, [initMedia, joinQueue, chatMode])
+    joinQueue(mode, _user.interests ?? [])
+  }, [initMedia, joinQueue, chatMode, _user.interests])
 
   // Send message to crush — always routes via socket by username (works even if not in same call)
   const handleSendCrushMessage = useCallback(
@@ -348,8 +348,24 @@ const VideoChat: React.FC<VideoChatProps> = ({
               {/* 💥 EXPLOSION — fires at 7 min for free users */}
               <ExplosionOverlay active={exploding} />
               {/* Partner name badge */}
-              <div className="absolute top-3 left-3 bg-black/50 backdrop-blur-sm px-3 py-1 rounded-full">
-                <span className="text-white text-sm font-semibold">{currentPartner.username}</span>
+              <div className="absolute top-3 left-3 flex flex-col gap-1.5">
+                <div className="bg-black/50 backdrop-blur-sm px-3 py-1 rounded-full">
+                  <span className="text-white text-sm font-semibold">{currentPartner.username}</span>
+                </div>
+                {/* Shared interests badge */}
+                {sharedTags.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex flex-wrap gap-1"
+                  >
+                    {sharedTags.map(tag => (
+                      <span key={tag} className="bg-freak-pink/80 backdrop-blur-sm text-white text-xs font-medium px-2 py-0.5 rounded-full">
+                        # {tag}
+                      </span>
+                    ))}
+                  </motion.div>
+                )}
               </div>
               {/* Date mode timer + badge — hidden until DATE_MODE_ENABLED */}
               {DATE_MODE_ENABLED && chatMode === 'date' && dateTimeLeft !== null && dateTimeLeft > 0 && (

@@ -12,7 +12,7 @@ interface UseFreakSocketOptions {
   username: string
   localStream: MediaStream | null
   remoteVideoRef: React.RefObject<HTMLVideoElement>
-  onConnected: (partner: Partner, mode: 'random' | 'date') => void
+  onConnected: (partner: Partner, mode: 'random' | 'date', sharedTags: string[]) => void
   onDisconnected: () => void
   onSearching: () => void
   onCrushRequest: (fromUsername: string) => void
@@ -59,6 +59,7 @@ export function useFreakSocket({
   const [isReady, setIsReady] = useState(false)
   const [serverOffline, setServerOffline] = useState(false)
   const [liveStats, setLiveStats] = useState<{ online: number; inCalls: number; searching: number } | null>(null)
+  const [sharedTags, setSharedTags] = useState<string[]>([])
   const pendingJoin = useRef(false)
   const pendingMode = useRef<'random' | 'date'>('random')
   const retryTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -211,7 +212,7 @@ export function useFreakSocket({
         if (pendingJoin.current) {
           pendingJoin.current = false
           onSearchingRef.current()
-          socket.emit('join-queue', { username, mode: pendingMode.current })
+          socket.emit('join-queue', { username, mode: pendingMode.current, tags: pendingTagsRef.current })
         }
       })
 
@@ -225,10 +226,12 @@ export function useFreakSocket({
       })
 
       // ── MATCH FOUND ──────────────────────────────────────────────
-      socket.on('match-found', async (data: { partner: Partner; isInitiator: boolean; mode?: string }) => {
+      socket.on('match-found', async (data: { partner: Partner; isInitiator: boolean; mode?: string; sharedTags?: string[] }) => {
         const matchMode = (data.mode === 'date' ? 'date' : 'random') as 'random' | 'date'
+        const common = Array.isArray(data.sharedTags) ? data.sharedTags : []
+        setSharedTags(common)
         isInitiatorRef.current = data.isInitiator  // remember role for ICE restart
-        onConnectedRef.current(data.partner, matchMode)
+        onConnectedRef.current(data.partner, matchMode, common)
 
         const pc = createPC()
 
@@ -341,15 +344,19 @@ export function useFreakSocket({
     }
   }, [username])
 
-  const joinQueue = useCallback((mode: 'random' | 'date' = 'random') => {
+  const pendingTagsRef = useRef<string[]>([])
+
+  const joinQueue = useCallback((mode: 'random' | 'date' = 'random', tags: string[] = []) => {
     onSearchingRef.current()
+    setSharedTags([])
     pendingMode.current = mode
+    pendingTagsRef.current = tags
     if (!socketRef.current?.connected || !isReady) {
       pendingJoin.current = true
       return
     }
     pendingJoin.current = false
-    socketRef.current.emit('join-queue', { username, mode })
+    socketRef.current.emit('join-queue', { username, mode, tags })
   }, [isReady, username])
 
   const leaveQueue = useCallback(() => {
@@ -364,7 +371,7 @@ export function useFreakSocket({
     if (socketRef.current?.connected) {
       // Small server-side delay before re-joining so cleanup propagates to old partner
       setTimeout(() => {
-        socketRef.current?.emit('join-queue', { username, mode: pendingMode.current })
+        socketRef.current?.emit('join-queue', { username, mode: pendingMode.current, tags: pendingTagsRef.current })
       }, 200)
     } else {
       pendingJoin.current = true
@@ -414,5 +421,5 @@ export function useFreakSocket({
     socketRef.current?.emit('chat-message', { type: 'text', text })
   }, [])
 
-  return { joinQueue, skip, stop, isReady, serverOffline, liveStats, sendCrushRequest, acceptCrushRequest, sendDirectCrushMessage, sendReadReceipt, replaceVideoTrack, sendCallChat }
+  return { joinQueue, skip, stop, isReady, serverOffline, liveStats, sharedTags, sendCrushRequest, acceptCrushRequest, sendDirectCrushMessage, sendReadReceipt, replaceVideoTrack, sendCallChat }
 }

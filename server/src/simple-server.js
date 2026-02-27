@@ -202,38 +202,54 @@ io.use((socket, next) => {
 })
 
 // ─── Matching helpers ───────────────────────────────────────────────────────
-function tryMatch(socket, mode = 'random') {
+function sharedTags(a, b) {
+  if (!a?.length || !b?.length) return []
+  return a.filter(t => b.includes(t))
+}
+
+function tryMatch(socket, mode = 'random', tags = []) {
   // Remove self from queue if already there
   const idx = waitingQueue.findIndex(w => w.socketId === socket.id)
   if (idx !== -1) waitingQueue.splice(idx, 1)
 
-  // Find a waiting partner with the SAME mode (random↔random, date↔date)
-  const partnerIdx = waitingQueue.findIndex(w => w.socketId !== socket.id && w.mode === mode)
-  if (partnerIdx === -1) {
-    // No one waiting in this mode — add to queue
-    waitingQueue.push({ socketId: socket.id, username: socket.user.username, socket, mode })
+  // Find all candidates with same mode
+  const candidates = waitingQueue.filter(w => w.socketId !== socket.id && w.mode === mode)
+  if (candidates.length === 0) {
+    // No one waiting — add to queue with tags
+    waitingQueue.push({ socketId: socket.id, username: socket.user.username, socket, mode, tags })
     socket.emit('queue-joined', { position: waitingQueue.filter(w => w.mode === mode).length })
-    console.log(`📋 Queue [${mode}]: ${socket.user.username} waiting (${waitingQueue.length} total)`)
+    console.log(`📋 Queue [${mode}]: ${socket.user.username} waiting [${tags.join(',')}] (${waitingQueue.length} total)`)
     return
   }
 
-  // Found a match!
+  // Score candidates by shared tags — prefer best match, fall back to first in queue
+  let bestCandidate = candidates[0]
+  let bestScore = sharedTags(tags, candidates[0].tags || []).length
+  for (const c of candidates.slice(1)) {
+    const score = sharedTags(tags, c.tags || []).length
+    if (score > bestScore) { bestScore = score; bestCandidate = c }
+  }
+
+  const partnerIdx = waitingQueue.findIndex(w => w.socketId === bestCandidate.socketId)
   const [partner] = waitingQueue.splice(partnerIdx, 1)
   activePairs.set(socket.id, partner.socketId)
   activePairs.set(partner.socketId, socket.id)
 
-  console.log(`🤝 Matched [${mode}]: ${socket.user.username} ↔ ${partner.username}`)
+  const common = sharedTags(tags, partner.tags || [])
+  console.log(`🤝 Matched [${mode}]: ${socket.user.username} ↔ ${partner.username} | shared: [${common.join(',')}]`)
 
-  // Tell both — initiator creates the WebRTC offer; include mode so frontend knows
+  // Tell both — include sharedTags so UI can show "you both like: X"
   socket.emit('match-found', {
     partner: { id: partner.socketId, username: partner.username },
     isInitiator: false,
     mode,
+    sharedTags: common,
   })
   partner.socket.emit('match-found', {
     partner: { id: socket.id, username: socket.user.username },
     isInitiator: true,
     mode,
+    sharedTags: common,
   })
 }
 
@@ -278,11 +294,12 @@ io.on('connection', (socket) => {
     pendingCrushMessages.delete(username)
   }
 
-  // User wants to find a match (mode: 'random' | 'date')
-  socket.on('join-queue', ({ mode } = {}) => {
+  // User wants to find a match (mode: 'random' | 'date', tags: string[])
+  socket.on('join-queue', ({ mode, tags } = {}) => {
     const queueMode = mode === 'date' ? 'date' : 'random'
-    console.log(`🔍 ${username} joining queue [${queueMode}]`)
-    tryMatch(socket, queueMode)
+    const cleanTags = Array.isArray(tags) ? tags.map(t => String(t).toLowerCase().trim()).filter(Boolean).slice(0, 5) : []
+    console.log(`🔍 ${username} joining queue [${queueMode}] tags: [${cleanTags.join(',')}]`)
+    tryMatch(socket, queueMode, cleanTags)
   })
 
   // User leaves queue / session

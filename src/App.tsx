@@ -147,12 +147,12 @@ function App() {
     return id
   }
 
-  const handleStart = useCallback((username: string) => {
+  const handleStart = useCallback((username: string, tags: string[] = []) => {
     const anonId = localStorage.getItem('freak_anon_id') || generateAnonId()
     const u: User = {
       id: anonId,
       username,
-      interests: [],
+      interests: tags,
       joinedAt: new Date(),
       connectionsCount: 0,
     }
