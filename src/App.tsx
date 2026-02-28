@@ -6,6 +6,7 @@ import VideoChat from './components/VideoChat'
 import ReportIssue from './components/ReportIssue'
 import OnboardingModal from './components/OnboardingModal'
 import StreamerBanner from './components/StreamerBanner'
+import Mascot from './components/Mascot'
 import { User, ConnectionState, Crush, ChatMessage } from './types'
 
 const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'https://freak-app-production.up.railway.app'
@@ -286,6 +287,16 @@ function App() {
           style: { background: '#141414', color: '#fff', border: '1px solid #1f1f1f' },
           duration: 2500,
         }}
+      />
+
+      {/* Mascot — lives on the site, reacts to app state */}
+      <Mascot
+        appState={
+          connectionState === 'connected' ? 'connected' :
+          connectionState === 'searching' ? 'searching' :
+          connectionState === 'disconnected' ? 'disconnected' :
+          'idle'
+        }
       />
     </div>
   )
