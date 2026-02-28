@@ -29,6 +29,7 @@ import WebRTCService from './services/WebRTCService.js'
 import authRoutes from './routes/auth.js'
 import sessionRoutes from './routes/sessions.js'
 import guestRoutes from './routes/guest.js'
+import clicksRoutes from './routes/clicks.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -122,6 +123,7 @@ class FreakyServer {
     this.app.use('/api/auth', authRoutes)
     this.app.use('/api/sessions', sessionRoutes)
     this.app.use('/api/guest', guestRoutes)
+    this.app.use('/api/clicks', clicksRoutes)
 
     // Stats endpoint (public but limited)
     this.app.get('/api/stats', generalRateLimit, (req, res) => {

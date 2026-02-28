@@ -74,6 +74,26 @@ function App() {
     loadStreamerInfo(refCode, true)
   }, [])
 
+  // ── On mount: click tracking beacon ───────────────────────────────────────
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const src = params.get('src') || params.get('s') || 'organic'
+    // Fire and forget — log every visit with its source
+    fetch(`${SERVER_URL}/api/clicks/ping?src=${encodeURIComponent(src)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ src }),
+    }).catch(() => {/* silent */})
+    // Clean tracking params from URL (keep others like ?ref=)
+    if (params.has('src') || params.has('s')) {
+      const clean = new URLSearchParams(window.location.search)
+      clean.delete('src')
+      clean.delete('s')
+      const q = clean.toString()
+      window.history.replaceState({}, '', window.location.pathname + (q ? `?${q}` : ''))
+    }
+  }, [])
+
   // ── On mount: check existing premium ──────────────────────────────────────
   useEffect(() => {
     checkPremium()
