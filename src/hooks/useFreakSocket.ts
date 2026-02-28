@@ -370,6 +370,8 @@ export function useFreakSocket({
       // ── LIVE CHAT MESSAGE (in-call relay) ────────────────────────
       socket.on('chat-message', ({ from, type, text, mediaUrl }: { from: string; type?: string; text?: string; mediaUrl?: string }) => {
         onChatMessageRef.current?.({ type: type || 'text', text, mediaUrl }, from)
+        // Dispatch for Mascot wingman
+        if (text) window.dispatchEvent(new CustomEvent('freak:chat', { detail: { from, text, ts: Date.now() } }))
       })
 
       // ── DIRECT CRUSH MESSAGE (routed by username) ─────────────────

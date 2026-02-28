@@ -289,7 +289,7 @@ function App() {
         }}
       />
 
-      {/* Mascot — lives on the site, reacts to app state */}
+      {/* Mascot — lives on the site, reacts to everything via custom events */}
       <Mascot
         appState={
           connectionState === 'connected' ? 'connected' :

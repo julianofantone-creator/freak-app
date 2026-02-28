@@ -70,6 +70,58 @@ function broadcastStats() {
 }
 setInterval(broadcastStats, 10000)
 
+// ─── Wingman AI (Groq llama-3.1-8b-instant — cheapest/fastest) ─────────────
+const WINGMAN_FALLBACKS = [
+  "Ask where they're from! 👀",
+  "What's your hot take on something random?",
+  "Funniest thing that happened to you this week?",
+  "What are you supposed to be doing right now lmao",
+  "Night owl or morning person?",
+  "What's the last thing that made you actually laugh?",
+  "Weirdest dream you've had recently?",
+  "What's lowkey underrated that nobody talks about?",
+  "If you could live anywhere, where?",
+  "You more of a chaos person or a chill person?",
+]
+
+app.post('/api/wingman', async (req, res) => {
+  try {
+    const { messages = [], situation = 'dry' } = req.body || {}
+    const GROQ_KEY = process.env.GROQ_API_KEY
+
+    if (!GROQ_KEY) {
+      // No key — return curated suggestion
+      return res.json({ suggestion: WINGMAN_FALLBACKS[Math.floor(Math.random() * WINGMAN_FALLBACKS.length)], model: 'fallback' })
+    }
+
+    const context = messages.slice(-6).map(m => `${m.from}: ${m.text}`).join('\n')
+    const prompt = context
+      ? `Chat so far:\n${context}\n\nConversation got quiet. What's one casual fun thing to say next?`
+      : "Just matched with a stranger on a video chat app. What's a fun opener (not cringe)?"
+
+    const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        messages: [
+          { role: 'system', content: 'You are a chill wingman. Give ONE short casual thing to say in a video chat (max 12 words). Just the line, no quotes, no explanation. Fun and natural.' },
+          { role: 'user', content: prompt }
+        ],
+        max_tokens: 30,
+        temperature: 0.95,
+      })
+    })
+
+    const data = await groqRes.json()
+    const suggestion = data.choices?.[0]?.message?.content?.trim() || WINGMAN_FALLBACKS[0]
+    res.json({ suggestion, model: 'llama-3.1-8b-instant' })
+  } catch (e) {
+    const suggestion = WINGMAN_FALLBACKS[Math.floor(Math.random() * WINGMAN_FALLBACKS.length)]
+    res.json({ suggestion, model: 'fallback' })
+  }
+})
+
 // ─── Click Tracking ────────────────────────────────────────────────────────
 const clickLog = [] // [{ src, ts, ip }]
 

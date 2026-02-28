@@ -100,6 +100,7 @@ const VideoChat: React.FC<VideoChatProps> = ({
         audio: true,
       })
       setLocalStream(stream)
+      window.dispatchEvent(new CustomEvent('freak:stream', { detail: stream }))
       if (localVideoRef.current) localVideoRef.current.srcObject = stream
       return stream
     } catch (err: any) {
