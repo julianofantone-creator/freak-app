@@ -70,6 +70,32 @@ function broadcastStats() {
 }
 setInterval(broadcastStats, 10000)
 
+// ─── Click Tracking ────────────────────────────────────────────────────────
+const clickLog = [] // [{ src, ts, ip }]
+
+app.post('/api/clicks/ping', (req, res) => {
+  const src = (req.query.src || req.body?.src || 'organic').slice(0, 32)
+  const ip  = (req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim().slice(0, 45)
+  clickLog.push({ src, ts: Date.now(), ip })
+  if (clickLog.length > 100000) clickLog.shift()
+  res.json({ ok: true })
+})
+
+app.get('/api/clicks/stats', (req, res) => {
+  const hours = Math.min(parseInt(req.query.hours) || 8, 8760)
+  const src   = req.query.src || null
+  const since = Date.now() - hours * 3600 * 1000
+  const filtered = clickLog.filter(c => c.ts >= since && (!src || c.source === src))
+  const breakdown = {}
+  for (const c of filtered) breakdown[c.src] = (breakdown[c.src] || 0) + 1
+  res.json({
+    ok: true, hours,
+    total: filtered.length,
+    allTime: clickLog.length,
+    breakdown: Object.entries(breakdown).sort((a,b) => b[1]-a[1]).map(([s,n]) => ({ src: s, count: n }))
+  })
+})
+
 // ─── REST: Issue reporting ──────────────────────────────────────────────────
 app.post('/api/report', (req, res) => {
   const { category, description, meta } = req.body || {}
