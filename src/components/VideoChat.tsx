@@ -59,6 +59,17 @@ const VideoChat: React.FC<VideoChatProps> = ({
   const [localStream, setLocalStream] = useState<MediaStream | null>(null)
   const [isVideoOn, setIsVideoOn] = useState(true)
   const [isAudioOn, setIsAudioOn] = useState(true)
+  // FOV modes: 'fill' = object-cover (default), 'wide' = object-contain, 'ultra' = contain + slight zoom out
+  const [fovMode, setFovMode] = useState<'fill' | 'wide' | 'ultra'>('fill')
+  const cycleFov = () => setFovMode(m => m === 'fill' ? 'wide' : m === 'wide' ? 'ultra' : 'fill')
+  const fovLabel = { fill: '1×', wide: '↔', ultra: '⛶' }
+  const fovTitle = { fill: 'Normal (fill)', wide: 'Wide (fit frame)', ultra: 'Ultra Wide' }
+  const fovVideoStyle = (mirror = false): React.CSSProperties => {
+    const base = mirror ? 'scaleX(-1)' : ''
+    if (fovMode === 'fill') return { objectFit: 'cover',    transform: base }
+    if (fovMode === 'wide') return { objectFit: 'contain',  transform: base, background: '#000' }
+    return                         { objectFit: 'contain',  transform: `${base} scale(0.88)`, background: '#000' }
+  }
   const [showCrushes, setShowCrushes] = useState(false)
   const [crushedCurrentPartner, setCrushedCurrentPartner] = useState(false)
   const [incomingCrush, setIncomingCrush] = useState<{ username: string } | null>(null)
@@ -96,8 +107,18 @@ const VideoChat: React.FC<VideoChatProps> = ({
     if (localStream) return localStream
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 360 } },
-        audio: true,
+        video: {
+          facingMode: 'user',
+          width:     { ideal: 1280, min: 640 },
+          height:    { ideal: 720,  min: 360 },
+          frameRate: { ideal: 30,   min: 15  },
+        },
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl:  true,
+          sampleRate:       48000,
+        },
       })
       setLocalStream(stream)
       window.dispatchEvent(new CustomEvent('freak:stream', { detail: stream }))
@@ -348,7 +369,8 @@ const VideoChat: React.FC<VideoChatProps> = ({
                 ref={remoteVideoRef}
                 autoPlay
                 playsInline
-                className="w-full h-full object-cover"
+                className="w-full h-full"
+                style={fovVideoStyle(false)}
               />
               {/* 💥 EXPLOSION — fires at 7 min for free users */}
               <ExplosionOverlay active={exploding} />
@@ -401,8 +423,8 @@ const VideoChat: React.FC<VideoChatProps> = ({
                 autoPlay
                 muted
                 playsInline
-                className="w-full h-full object-cover"
-                style={{ transform: 'scaleX(-1)' }}
+                className="w-full h-full"
+                style={fovVideoStyle(true)}
               />
               {/* Filter canvas self-view — hook blits filtered output here every frame */}
               <canvas
@@ -750,6 +772,16 @@ const VideoChat: React.FC<VideoChatProps> = ({
           <motion.button onClick={toggleAudio} whileTap={{ scale: 0.9 }}
             className={`w-11 h-11 rounded-full flex items-center justify-center ${isAudioOn ? 'bg-freak-surface border border-freak-border' : 'bg-red-500'}`}>
             {isAudioOn ? <Mic className="w-5 h-5 text-white" /> : <MicOff className="w-5 h-5 text-white" />}
+          </motion.button>
+
+          {/* FOV toggle */}
+          <motion.button
+            onClick={cycleFov}
+            whileTap={{ scale: 0.9 }}
+            title={fovTitle[fovMode]}
+            className={`w-11 h-11 rounded-full flex items-center justify-center text-sm font-bold ${fovMode !== 'fill' ? 'bg-freak-pink shadow-pink text-white' : 'bg-freak-surface border border-freak-border text-white'}`}
+          >
+            {fovLabel[fovMode]}
           </motion.button>
 
           {(isConnected || isSearching) && (

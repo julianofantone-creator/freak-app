@@ -39,6 +39,31 @@ const ICE_SERVERS = [
   { urls: 'turns:global.relay.metered.ca:443?transport=tcp', username: TURN_USER, credential: TURN_CRED },
 ]
 
+// Boost video bitrate in SDP — targets 2.5 Mbps video, 128k audio
+// This makes video quality significantly better than Omegle/OmeTV/Monkey
+function boostBitrate(sdp: string): string {
+  const VIDEO_BITRATE_KBPS = 2500
+  const AUDIO_BITRATE_KBPS = 128
+  return sdp
+    .split('\r\n')
+    .map((line, i, arr) => {
+      // Insert bandwidth line after each m= line
+      if (line.startsWith('m=video')) {
+        // Find c= line index or insert after m=
+        return line
+      }
+      if (line.startsWith('m=audio')) return line
+      // After c= line following m=video, insert b=AS
+      if (line.startsWith('c=')) {
+        const prev = arr.slice(0, i).reverse().find(l => l.startsWith('m='))
+        if (prev?.startsWith('m=video')) return `${line}\r\nb=AS:${VIDEO_BITRATE_KBPS}\r\nb=TIAS:${VIDEO_BITRATE_KBPS * 1000}`
+        if (prev?.startsWith('m=audio')) return `${line}\r\nb=AS:${AUDIO_BITRATE_KBPS}`
+      }
+      return line
+    })
+    .join('\r\n')
+}
+
 export function useFreakSocket({
   username,
   localStream,
@@ -296,8 +321,9 @@ export function useFreakSocket({
           await new Promise(r => setTimeout(r, 300))
           try {
             const offer = await pc.createOffer({ offerToReceiveAudio: true, offerToReceiveVideo: true })
-            await pc.setLocalDescription(offer)
-            socket.emit('webrtc:offer', { offer })
+            const boostedOffer = { ...offer, sdp: boostBitrate(offer.sdp || '') }
+            await pc.setLocalDescription(boostedOffer)
+            socket.emit('webrtc:offer', { offer: boostedOffer })
           } catch (e) {
             console.error('Offer failed:', e)
           }
@@ -315,8 +341,9 @@ export function useFreakSocket({
             try { await pc.addIceCandidate(new RTCIceCandidate(c)) } catch (_) {}
           }
           const answer = await pc.createAnswer()
-          await pc.setLocalDescription(answer)
-          socket.emit('webrtc:answer', { answer })
+          const boostedAnswer = { ...answer, sdp: boostBitrate(answer.sdp || '') }
+          await pc.setLocalDescription(boostedAnswer)
+          socket.emit('webrtc:answer', { answer: boostedAnswer })
         } catch (e) {
           console.error('Answer failed:', e)
         }
