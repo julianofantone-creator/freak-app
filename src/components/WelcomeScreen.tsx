@@ -9,13 +9,25 @@ interface WelcomeScreenProps {
   streamerInfo?: { streamerName: string; streamUrl: string; code: string } | null
 }
 
-const POPULAR_TAGS = [
-  '🎮 gaming', '🎵 music', '🍿 movies', '📺 anime', '💪 fitness',
-  '🎨 art', '💻 coding', '📸 photography', '🤣 memes', '☕ chill',
-  '🏀 sports', '🎤 rap', '🌮 food', '✈️ travel', '🐾 pets',
+// Quick-pick categories — these show as big tappable boxes
+const CATEGORIES = [
+  { emoji: '💕', label: 'dating',   display: 'Dating' },
+  { emoji: '🎮', label: 'gaming',   display: 'Gaming' },
+  { emoji: '🌙', label: 'night owl',display: 'Night Owl' },
+  { emoji: '🎵', label: 'music',    display: 'Music' },
+  { emoji: '😂', label: 'vibes',    display: 'Vibes' },
+  { emoji: '💬', label: 'just talk',display: 'Just Talk' },
+  { emoji: '🎨', label: 'art',      display: 'Art' },
+  { emoji: '💪', label: 'fitness',  display: 'Fitness' },
+  { emoji: '📺', label: 'anime',    display: 'Anime' },
+  { emoji: '🎤', label: 'rap',      display: 'Rap' },
+  { emoji: '💻', label: 'coding',   display: 'Coding' },
+  { emoji: '🍿', label: 'movies',   display: 'Movies' },
 ]
 
-const MAX_TAGS = 5
+const POPULAR_TAGS = CATEGORIES.map(c => `${c.emoji} ${c.display}`)
+
+const MAX_TAGS = 6
 
 const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, premium, streamerInfo }) => {
   const [username, setUsername] = useState('')
@@ -110,63 +122,68 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ onStart, premium, streame
           className="w-full bg-freak-surface border border-freak-border text-white placeholder-freak-muted rounded-2xl px-5 py-4 text-base focus:outline-none focus:border-freak-pink transition-colors"
         />
 
-        {/* Interests section */}
-        <div className="space-y-2">
-          {/* Tag input box */}
+        {/* ── Category / Interest Box ── */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-white font-bold text-sm">What you here for? <span className="text-freak-pink">#{' '}</span></p>
+            {tags.length > 0 && (
+              <span className="text-freak-pink text-xs font-semibold">{tags.length} selected</span>
+            )}
+          </div>
+
+          {/* Category grid */}
+          <div className="grid grid-cols-4 gap-2">
+            {CATEGORIES.map(cat => {
+              const selected = tags.includes(cat.label)
+              return (
+                <motion.button
+                  key={cat.label}
+                  onClick={() => selected ? removeTag(cat.label) : addTag(`${cat.emoji} ${cat.display}`)}
+                  whileTap={{ scale: 0.92 }}
+                  disabled={!selected && tags.length >= MAX_TAGS}
+                  className={`flex flex-col items-center justify-center gap-1 rounded-2xl py-3 px-1 text-center transition-all border ${
+                    selected
+                      ? 'bg-freak-pink/20 border-freak-pink text-freak-pink shadow-[0_0_12px_rgba(255,20,147,0.3)]'
+                      : 'bg-freak-surface border-freak-border text-freak-muted hover:border-freak-pink/40 hover:text-white'
+                  } disabled:opacity-30 disabled:cursor-not-allowed`}
+                >
+                  <span className="text-xl leading-none">{cat.emoji}</span>
+                  <span className="text-xs font-semibold leading-tight">{cat.display}</span>
+                </motion.button>
+              )
+            })}
+          </div>
+
+          {/* Custom hashtag input */}
           <div
-            className="w-full bg-freak-surface border border-freak-border rounded-2xl px-4 py-3 flex flex-wrap gap-2 cursor-text focus-within:border-freak-pink transition-colors"
+            className="w-full bg-freak-surface border border-freak-border rounded-2xl px-4 py-2.5 flex flex-wrap gap-2 cursor-text focus-within:border-freak-pink transition-colors"
             onClick={() => tagInputRef.current?.focus()}
           >
-            <Hash size={16} className="text-freak-muted mt-0.5 shrink-0" />
-            {tags.map(tag => (
-              <motion.span
-                key={tag}
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.8, opacity: 0 }}
-                className="inline-flex items-center gap-1 bg-freak-pink/20 border border-freak-pink/40 text-freak-pink text-sm rounded-full px-2.5 py-0.5"
-              >
+            <Hash size={14} className="text-freak-muted mt-0.5 shrink-0" />
+            {tags.filter(t => !CATEGORIES.find(c => c.label === t)).map(tag => (
+              <motion.span key={tag} initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                className="inline-flex items-center gap-1 bg-freak-pink/20 border border-freak-pink/40 text-freak-pink text-xs rounded-full px-2 py-0.5">
                 {tag}
-                <button onClick={(e) => { e.stopPropagation(); removeTag(tag) }} className="hover:text-white transition-colors">
-                  <X size={11} />
+                <button onClick={e => { e.stopPropagation(); removeTag(tag) }} className="hover:text-white">
+                  <X size={10} />
                 </button>
               </motion.span>
             ))}
             {tags.length < MAX_TAGS && (
-              <input
-                ref={tagInputRef}
-                type="text"
-                value={tagInput}
+              <input ref={tagInputRef} type="text" value={tagInput}
                 onChange={e => setTagInput(e.target.value)}
                 onKeyDown={handleTagInputKeyDown}
-                placeholder={tags.length === 0 ? 'add interests to find your people…' : 'add more…'}
-                className="flex-1 min-w-[120px] bg-transparent text-white placeholder-freak-muted text-sm focus:outline-none"
-                maxLength={20}
-              />
+                placeholder="add a custom #tag…"
+                className="flex-1 min-w-[100px] bg-transparent text-white placeholder-freak-muted text-sm focus:outline-none"
+                maxLength={20} />
             )}
           </div>
 
-          {/* Popular tag chips */}
-          <div className="flex flex-wrap gap-1.5">
-            {POPULAR_TAGS.filter(pt => {
-              const clean = pt.replace(/^[\p{Emoji}\s]+/u, '').trim().toLowerCase()
-              return !tags.includes(clean)
-            }).slice(0, 10).map(pt => (
-              <button
-                key={pt}
-                onClick={() => addTag(pt)}
-                disabled={tags.length >= MAX_TAGS}
-                className="text-xs bg-freak-surface border border-freak-border text-freak-muted hover:text-freak-pink hover:border-freak-pink/50 rounded-full px-2.5 py-1 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {pt}
-              </button>
-            ))}
-          </div>
-
           {tags.length > 0 && (
-            <p className="text-freak-muted text-xs text-center">
-              we'll try to match you with people who like the same things 🎯
-            </p>
+            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+              className="text-freak-pink/80 text-xs text-center font-medium">
+              🎯 we'll match you with people into the same stuff
+            </motion.p>
           )}
         </div>
 
