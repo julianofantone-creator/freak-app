@@ -30,7 +30,6 @@ const activePairs = new Map() // socketId → partnerSocketId
 const userSockets = new Map() // username → socket (for direct messaging)
 const pendingCrushMessages = new Map() // username → [{ id, from, type, text, mediaUrl, timestamp }]
 const reports = [] // [{ id, category, description, meta, timestamp }]
-const botSockets = new Map() // botId → fakeSocket (for partner lookups)
 
 // ─── Streamer mode state ───────────────────────────────────────────────────
 const streamerCodes = new Map() // code → { streamerName, streamUrl, createdAt, clicks, referrals }
@@ -280,11 +279,6 @@ io.use((socket, next) => {
   }
 })
 
-// ─── Socket lookup (real + bots) ────────────────────────────────────────────
-function getAnySocket(id) {
-  return io.sockets.sockets.get(id) || botSockets.get(id) || null
-}
-
 // ─── Matching helpers ───────────────────────────────────────────────────────
 function sharedTags(a, b) {
   if (!a?.length || !b?.length) return []
@@ -342,12 +336,11 @@ function cleanup(socket) {
   const qi = waitingQueue.findIndex(w => w.socketId === socket.id)
   if (qi !== -1) waitingQueue.splice(qi, 1)
 
-  // Notify partner (works for real sockets + bots)
   const partnerId = activePairs.get(socket.id)
   if (partnerId) {
     activePairs.delete(socket.id)
     activePairs.delete(partnerId)
-    const partnerSocket = getAnySocket(partnerId)
+    const partnerSocket = io.sockets.sockets.get(partnerId)
     if (partnerSocket) {
       partnerSocket.emit('peer-disconnected', { reason: 'partner left' })
     }
@@ -391,7 +384,7 @@ io.on('connection', (socket) => {
   socket.on('partner-leaving', () => {
     const partnerId = activePairs.get(socket.id)
     if (partnerId) {
-      const partnerSocket = getAnySocket(partnerId)
+      const partnerSocket = io.sockets.sockets.get(partnerId)
       if (partnerSocket) {
         partnerSocket.emit('peer-disconnected', { reason: 'partner left' })
         console.log(`🚪 Fast disconnect: ${username} → notified partner immediately`)
@@ -480,90 +473,8 @@ io.on('connection', (socket) => {
   })
 })
 
-// ─── 🤖 Bot Service — Ghost users to fill queue & prevent cold-start wait ────
-// Bots sit in queue. When matched with a real user, they wait 8-15s then leave.
-// From user perspective: instant match → other person drops after a moment → re-queue.
-// Keeps perceived wait time near-zero even when traffic is low.
-
-const BOT_NAMES = ['Alex', 'Jordan', 'Casey', 'Sam', 'Riley', 'Morgan', 'Taylor', 'Quinn', 'Drew', 'Blake', 'Avery', 'Jamie']
-const BOT_TARGET = 2 // always try to keep N bots in queue
-
-function createFakeSocket(name) {
-  const botId = `bot_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`
-  let matchTimer = null
-
-  const fakeSocket = {
-    id: botId,
-    isBot: true,
-    user: { id: botId, username: name },
-    emit(event, data) {
-      if (event === 'match-found') {
-        // Matched with a real user — wait then leave so they re-queue quickly
-        const delay = 8000 + Math.random() * 7000 // 8-15s
-        console.log(`🤖 Bot ${name} matched — will ghost in ${Math.round(delay/1000)}s`)
-        matchTimer = setTimeout(() => {
-          const partnerId = activePairs.get(botId)
-          if (partnerId) {
-            activePairs.delete(botId)
-            activePairs.delete(partnerId)
-            const partnerSocket = io.sockets.sockets.get(partnerId)
-            if (partnerSocket) {
-              partnerSocket.emit('peer-disconnected', { reason: 'partner left' })
-              console.log(`🤖 Bot ${name} ghosted → partner re-queues`)
-            }
-          }
-          botSockets.delete(botId)
-          // Respawn a fresh bot after a short break
-          setTimeout(spawnBot, 3000 + Math.random() * 4000)
-        }, delay)
-      } else if (event === 'queue-joined') {
-        console.log(`🤖 Bot ${name} in queue (total bots: ${botSockets.size})`)
-      } else if (event === 'peer-disconnected') {
-        // Real partner skipped the bot — clean up and respawn
-        if (matchTimer) { clearTimeout(matchTimer); matchTimer = null }
-        activePairs.delete(botId)
-        botSockets.delete(botId)
-        console.log(`🤖 Bot ${name} got skipped — respawning`)
-        setTimeout(spawnBot, 2000 + Math.random() * 3000)
-      }
-    }
-  }
-
-  return fakeSocket
-}
-
-function spawnBot() {
-  // Only spawn if we need more bots in queue
-  const botsInQueue = waitingQueue.filter(w => w.socket?.isBot).length
-  if (botsInQueue >= BOT_TARGET) return
-
-  const name = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)] + Math.floor(Math.random() * 99)
-  const fakeSocket = createFakeSocket(name)
-  botSockets.set(fakeSocket.id, fakeSocket)
-  tryMatch(fakeSocket, 'random', [])
-}
-
-function startBotService() {
-  console.log(`🤖 Bot service starting — maintaining ${BOT_TARGET} queue ghosts`)
-  // Initial spawn
-  for (let i = 0; i < BOT_TARGET; i++) {
-    setTimeout(spawnBot, i * 1500)
-  }
-  // Periodic check — top up bots if queue is short
-  setInterval(() => {
-    const botsInQueue = waitingQueue.filter(w => w.socket?.isBot).length
-    const realUsersInQueue = waitingQueue.filter(w => !w.socket?.isBot).length
-    // Only add bots when real user traffic is low
-    if (botsInQueue < BOT_TARGET && realUsersInQueue < 5) {
-      spawnBot()
-    }
-  }, 15000)
-}
-
 httpServer.listen(PORT, () => {
   console.log(`🔥 Freak server running on port ${PORT}`)
   console.log(`🌐 CORS: all origins`)
   console.log(`🎥 Mode: WebRTC signaling + in-memory matching`)
-  // Start ghost bots after server is up
-  setTimeout(startBotService, 2000)
 })
